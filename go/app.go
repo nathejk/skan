@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"html/template"
 	"log"
 	"log/slog"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"nathejk.dk/internal/data"
-	"nathejk.dk/superfluids/streaminterface"
 )
 
 // Config holds application-level configuration
@@ -38,12 +36,12 @@ type config struct {
 
 // App holds the application state and dependencies
 type App struct {
-	config    config
-	Logger    *slog.Logger
-	Session   *scs.SessionManager
-	template  *template.Template
-	jetstream streaminterface.Stream
-	models    data.Models
+	config  config
+	Logger  *slog.Logger
+	Session *scs.SessionManager
+	//template  *template.Template
+	//jetstream streaminterface.Stream
+	models data.Models
 }
 
 func (a *App) configure() {

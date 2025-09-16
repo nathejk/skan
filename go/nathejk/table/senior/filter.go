@@ -1,7 +1,6 @@
 package senior
 
 import (
-	"math"
 	"strings"
 
 	"github.com/nathejk/shared-go/types"
@@ -65,6 +64,7 @@ type Metadata struct {
 	TotalRecords int          `json:"total_records,omitempty"`
 }
 
+/*
 // The calculateMetadata() function calculates the appropriate pagination metadata
 // values given the total number of records, current page, and page size values. Note
 // that the last page value is calculated using the math.Ceil() function, which rounds
@@ -83,4 +83,4 @@ func calculateMetadata(year string, totalRecords, page, pageSize int) Metadata {
 		LastPage:     int(math.Ceil(float64(totalRecords) / float64(pageSize))),
 		TotalRecords: totalRecords,
 	}
-}
+}*/

@@ -37,7 +37,7 @@ ENTRYPOINT go tool air -c go.air.toml
 #
 FROM base AS build
 WORKDIR /build
-COPY . .
+COPY go .
 RUN go mod download
 RUN go mod verify
 RUN go test -cover -timeout 60s ./...

@@ -16,7 +16,7 @@ type querier struct {
 
 func (q *querier) GetAll(ctx context.Context, filters Filter) ([]*Patrulje, error) {
 	// Create a context with a 3-second timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
 	query := `SELECT p.teamId, teamNumber, name, groupName, korps, liga, contactName, contactPhone, contactEmail, contactRole, signupStatus,

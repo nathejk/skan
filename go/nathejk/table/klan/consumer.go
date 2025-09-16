@@ -15,7 +15,7 @@ type consumer struct {
 	w tablerow.Consumer
 }
 
-func (_ *consumer) Consumes() []streaminterface.Subject {
+func (c *consumer) Consumes() []streaminterface.Subject {
 	return []streaminterface.Subject{
 		//streaminterface.SubjectFromStr("monolith:nathejk_team"),
 		//streaminterface.SubjectFromStr("nathejk"),
