@@ -1,0 +1,17 @@
+CREATE TABLE IF NOT EXISTS personnel (
+    userId VARCHAR(99) NOT NULL,
+    userType VARCHAR(99) NOT NULL,
+    year VARCHAR(99) NOT NULL DEFAULT "",
+    name VARCHAR(99) NOT NULL DEFAULT "",
+    email VARCHAR(99) NOT NULL,
+    phone VARCHAR(99) NOT NULL,
+    groupName VARCHAR(99) NOT NULL DEFAULT "",
+    korps VARCHAR(9) NOT NULL DEFAULT "",
+    klan VARCHAR(999) NOT NULL DEFAULT "",
+    tshirtSize VARCHAR(9) NOT NULL DEFAULT '',
+    createdAt VARCHAR(99) NOT NULL,
+    updatedAt VARCHAR(99) NOT NULL,
+    signupStatus VARCHAR(9) NOT NULL DEFAULT "",
+    additionals TEXT NOT NULL DEFAULT "",
+    PRIMARY KEY (userId)
+);

@@ -1,0 +1,23 @@
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+#
+# See https://github.com/air-verse/air
+#
+
+[build]
+bin = "/tmp/main"
+cmd = "go test -timeout 10s ./... && go build -o /tmp/main ."
+delay = 5
+include_file = ["go.air.toml", "go.mod"]
+exclude_regex = []
+kill_delay = "10s"
+log = "/tmp/build-errors.log"
+send_interrupt = true
+stop_on_error = true
+
+[misc]
+
+# Delete tmp directory on exit
+clean_on_exit = true

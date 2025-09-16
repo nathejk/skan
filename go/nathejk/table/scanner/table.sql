@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS personnel (
+    userId VARCHAR(99) NOT NULL,
+    userType VARCHAR(99) NOT NULL,
+    teamId VARCHAR(99) NOT NULL,
+    year VARCHAR(99) NOT NULL DEFAULT "",
+    name VARCHAR(99) NOT NULL DEFAULT "",
+    phone VARCHAR(99) NOT NULL,
+    createdAt VARCHAR(99) NOT NULL,
+    updatedAt VARCHAR(99) NOT NULL,
+    PRIMARY KEY (userId)
+);

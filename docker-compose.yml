@@ -1,0 +1,90 @@
+volumes:
+  go:
+
+networks:
+  local:
+  traefik:
+    external: true
+  jetstream:
+    external: true
+
+services:
+  gw:
+    image: jrgensen/gateway
+    platform: linux/x86_64
+    environment:
+      PROXY_MAPPINGS: >
+        skan:api
+        mysql:adminer:8080
+        redis:redis-commander:8081
+    networks:
+    - local
+    - traefik
+    labels:
+      traefik.enable: true
+      traefik.docker.network: traefik
+      traefik.http.routers.skan.rule: Host(`skan.dev.nathejk.dk`) || Host(`skan.local.nathejk.dk`) || HostRegexp(`.+\.skan\..+\.nathejk\.dk`)
+
+  api:
+    build:
+      context: .
+      target: dev
+      dockerfile: docker/Dockerfile
+    #entrypoint: /app/docker/bin/init-dev
+    #command: api
+    volumes:
+    - ./go:/app
+    - ./webroot:/webroot
+    - go:/go
+    networks:
+    - local
+    - jetstream
+    environment:
+      #GO_BUILD_FLAGS: -race
+      JETSTREAM_DSN: nats://dev.nathejk.dk:4222
+      DB_DSN: root:ib@tcp(mysql:3306)/skan?parseTime=true
+      SMS_DSN: cpsms://TOKEN@api.cpsms.dk
+      REDIS_ADDR: redis:6379
+      SECRET: nh2025
+    depends_on:
+    - gw
+    - mysql
+
+  mysql:
+    image: mariadb:10.8
+    environment:
+      MYSQL_ROOT_PASSWORD: ib
+      MYSQL_DATABASE: skan
+      MYSQL_USER: nathejk
+      MYSQL_PASSWORD: kodeord
+      TZ: Europe/Copenhagen
+    networks:
+    - local
+
+  adminer:
+    image: adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+      ADMINER_DEFAULT_USER: nathejk
+      ADMINER_DEFAULT_PASSWORD: kodeord
+      ADMINER_DEFAULT_DB: skan
+    networks:
+    - local
+    depends_on:
+    - gw
+    - mysql
+
+  redis:
+    image: redis:4.0-alpine3.8
+    entrypoint: redis-server --appendonly yes
+    networks:
+    - local
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    platform: linux/x86_64
+    environment:
+      REDIS_HOSTS: skan:redis:6379
+    networks:
+    - local
+

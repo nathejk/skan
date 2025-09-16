@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS pincode (
+    teamId VARCHAR(99) NOT NULL,
+    pinCode VARCHAR(9) NOT NULL,
+    PRIMARY KEY (teamId)
+);

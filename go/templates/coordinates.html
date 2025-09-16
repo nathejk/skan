@@ -1,0 +1,52 @@
+{{define "title"}}Nathejk{{end}}
+
+{{define "content"}}
+<script type="text/javascript">
+ 
+  function getLocation(pos)
+  {
+    var latitde = pos.coords.latitude;
+    var longitude = pos.coords.longitude;
+    location.href = '?location=' + latitde + ':' + longitude;
+  }
+  function unknownLocation()
+  {
+        var coor = prompt('Indtast dit kortkoordinat:');
+        if (coor) {
+            location.href = '?location=' + coor;
+        } else {
+            alert('du mangler at opgive koordinat, din fangst er ikke registreret');
+        }
+  }
+if (navigator && navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(getLocation, unknownLocation);
+} else {
+  unknownLocation();
+}
+</script>
+
+    <div class="starter-template">
+<!-- button onclick="unknownLocation()">Tryk her</button -->
+<h1>Finder position</h1>
+<i class="icon-spinner icon-spin icon-5x"></i>
+    </div>
+
+      <div class="starter-template">
+
+        <h1>{{ .armNumber }}. {{ .team }}</h1>
+        <div class="row">
+            <div class="col-md-3"></div>
+            <img src="{{ .photo }}" alt="Billede af patruljen" class="img-rounded col-md-6">
+        </div>
+        {{ if .isBandit }}
+            {{ if eq .catchCount 1 }}
+                <p class="lead">BINGO, det er først gang at denne patrulje bliver fanget</p>
+            {{ else }}
+                <p class="lead">Denne patrulje er nu blevet fanget {{ .catchCount }} gange.</p>
+            {{ end }}
+        {{ else }}
+            <p class="lead">Denne patrulje er blevet fanget {{ .catchCount }} gange - i alt er de nu blevet scannet {{ .scanCount }} gange</p>
+        {{ end }}
+        {{ if ne .remark "" }}<p class="lead" style="color:red">{{ .remark }}</p>{{ end }}
+      </div>
+{{end}}
