@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,8 +16,11 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+//go:embed templates/*
+var fs embed.FS
+
 func (a *App) indexHandler(w http.ResponseWriter, r *http.Request) {
-	ts, err := template.ParseFiles("templates/base.html", "templates/index.html")
+	ts, err := template.ParseFS(fs, "base.html", "index.html")
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -27,7 +31,7 @@ func (a *App) indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
-	ts, err := template.ParseFiles("templates/base.html", "templates/login.html")
+	ts, err := template.ParseFS(fs, "base.html", "login.html")
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -67,7 +71,7 @@ func (a *App) doLoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
-	ts, err := template.ParseFiles("templates/base.html", "templates/coordinates.html")
+	ts, err := template.ParseFS(fs, "base.html", "coordinates.html")
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -96,7 +100,7 @@ func (a *App) qrHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) aboutHandler(w http.ResponseWriter, r *http.Request) {
-	ts, err := template.ParseFiles("templates/base.html", "templates/about.html")
+	ts, err := template.ParseFS(fs, "base.html", "about.html")
 	if err != nil {
 		log.Print(err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
