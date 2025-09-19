@@ -222,6 +222,7 @@ func (a *App) routes() http.Handler {
 	r.Get("/healthcheck", a.HealthcheckHandler)
 	// Route for index page
 	r.Get("/", a.indexHandler)
+	r.Post("/", a.doIndexHandler)
 
 	user := login.New(a.models)
 
