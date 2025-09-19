@@ -59,8 +59,8 @@ function register(data) {
   function getLocation(pos)
   {
       register({
-    latitde: pos.coords.latitude,
-    longitude: pos.coords.longitude,
+    latitde: pos.coords.latitude.toString(),
+    longitude: pos.coords.longitude.toString(),
       })
     //location.href = '?location=' + latitde + ':' + longitude;
   }

@@ -65,6 +65,8 @@ services:
       SMS_DSN: cpsms://TOKEN@api.cpsms.dk
       REDIS_ADDR: redis:6379
       SECRET: nh2025
+    ports:
+    - 80
     depends_on:
     - gw
     - mysql
