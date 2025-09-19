@@ -1,9 +1,41 @@
-{{define "index"}}
-    {{template "base" .}}
-{{end}}
-
-{{define "title"}}Home Page{{end}}
+{{define "title"}}Nathejk{{end}}
 
 {{define "content"}}
-<h1>Welcome to the Home Page</h1>
+<style>
+#main .working, #main .success, #main.working .error, #main.success .error  { display:none; } 
+#main.working .working, #main.success .success { display:block; }
+</style>
+<main id="main">
+    <div class="error starter-template">
+        <p>Kunne ikke finde position - Din indtastning er ikke registreret.</p>
+    </div>
+    <div class="working starter-template">
+        <h1>Finder position</h1>
+        <i class="icon-spinner icon-spin icon-5x"></i>
+    </div>
+    <div class="success starter-template">
+    <h1>Registrer patrulje</h1>
+    <p class="lead">Indtast patruljenummer som står på armen af spejderne - det er <u>ikke</u> det lille nummer som står ved QR koden:</p>
+        <form action="" method="post">
+            <input type="hidden" id="lat" name="latitude" value="" />
+            <input type="hidden" id="lng" name="longitude" value="" />
+            <input type="number" class="form-control" name="number" placeholder="Patruljenummer">
+            <button type="submit" class="btn btn-primary">Videre &raquo;</button>
+        </form>
+    </div>
+</main>
+<script type="text/javascript">
+const unknownLocation = x => document.getElementById('main').className = ''
+const getLocation = pos => { 
+    document.getElementById('lat').value = pos.coords.latitude
+    document.getElementById('lng').value = pos.coords.longitude
+    document.getElementById('main').className = 'success'
+}
+document.getElementById('main').className = 'working'
+if (navigator && navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(getLocation, unknownLocation);
+} else {
+  unknownLocation();
+}
+</script>
 {{end}}
