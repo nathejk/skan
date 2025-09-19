@@ -38,7 +38,7 @@ func (a *App) doIndexHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if team != nil {
-		if err := a.commands.QR.Scan("", *team, *user, r.FormValue("latitude"), r.FormValue("longitude")); err != nil {
+		if err := a.commands.QR.Scan("x", *team, *user, r.FormValue("latitude"), r.FormValue("longitude")); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
