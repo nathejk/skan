@@ -121,17 +121,6 @@ func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *App) doLoginHandler(w http.ResponseWriter, r *http.Request) {
-	ts, err := template.ParseFS(fs, "templates/base.html", "templates/login.html")
-	if err != nil {
-		http.Error(w, "Internal Server Error (login)", http.StatusInternalServerError)
-		return
-	}
-	if err := ts.ExecuteTemplate(w, "base", nil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
 func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 	user, _ := login.UserFromRequest(r)
 	if user == nil {
