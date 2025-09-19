@@ -2,6 +2,10 @@
 {{define "title"}}Nathejk{{end}}
 
 {{define "content"}}
+{{ if .found }}
 <h1>{{.armNumber}}. {{ .team.Name }}</h1>
 <p class="lead">Er registreret</p>
+{{ else }}
+<h1>Patrulje ikke fundet</h1>
+{{end}}
 {{end}}

@@ -49,10 +49,11 @@ func (a *App) doIndexHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{
-		"team": team,
+		"team":  team,
+		"found": false,
 	}
 	if team != nil {
-		data["confirm"] = true
+		data["found"] = true
 		data["armNumber"] = fmt.Sprintf("%s-%d", team.TeamNumber, team.MemberCount)
 	}
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
@@ -218,13 +219,13 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"status":"ok"}`))
 }
 func (a *App) routes() http.Handler {
+	user := login.New(a.models)
+
 	r := chi.NewRouter()
 	r.Get("/healthcheck", a.HealthcheckHandler)
 	// Route for index page
-	r.Get("/", a.indexHandler)
+	r.Get("/", user.Authenticate(a.indexHandler, a.loginHandler))
 	r.Post("/", a.doIndexHandler)
-
-	user := login.New(a.models)
 
 	// Route for about page
 	r.Get("/about", a.aboutHandler)
