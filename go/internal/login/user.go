@@ -113,6 +113,10 @@ func (a *auth) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	}
 
+	path := r.URL.Path
+	if r.FormValue("redir") != "" {
+		path = r.FormValue("redir")
+	}
 	http.SetCookie(w, &cookie)
-	http.Redirect(w, r, r.URL.Path, http.StatusSeeOther)
+	http.Redirect(w, r, path, http.StatusSeeOther)
 }

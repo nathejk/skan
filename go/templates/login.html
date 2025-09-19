@@ -4,7 +4,8 @@
       <div class="starter-template">
         <h1>Scan</h1>
         <p class="lead">For at kunne scanne patruljer skal du logge ind, det gør du ved at skrive dit telefonnummer i feltet herunder</p>
-        <form class="form-inline" action="" method="post">
+        <form class="form-inline" action="/login" method="post">
+            <input type="hidden" name="redir" value="{{ .path }}" />
             <div class="form-group">
                 <input type="text" class="form-control" placeholder="telefonnummer" name="phone">
             </div>

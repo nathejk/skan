@@ -32,9 +32,9 @@ func (a *App) doIndexHandler(w http.ResponseWriter, r *http.Request) {
 	teamNumber, _ := strconv.Atoi(r.FormValue("number"))
 	team, _ := a.models.Patrulje.GetByNumber(r.Context(), teamNumber)
 
-	user, _ := login.UserFromRequest(r)
+	user, err := login.UserFromRequest(r)
 	if user == nil {
-		http.Error(w, "No user", http.StatusForbidden)
+		http.Error(w, fmt.Sprintf("No user %#v", err), http.StatusForbidden)
 		return
 	}
 	if team != nil {
@@ -108,6 +108,20 @@ func (a *App) doMapHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/login.html")
+	if err != nil {
+		http.Error(w, "Internal Server Error (login)", http.StatusInternalServerError)
+		return
+	}
+	data := map[string]any{
+		"path": r.URL.Path,
+	}
+	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (a *App) doLoginHandler(w http.ResponseWriter, r *http.Request) {
 	ts, err := template.ParseFS(fs, "templates/base.html", "templates/login.html")
 	if err != nil {
 		http.Error(w, "Internal Server Error (login)", http.StatusInternalServerError)
@@ -231,6 +245,7 @@ func (a *App) routes() http.Handler {
 	r.Get("/about", a.aboutHandler)
 	//r.Get("/login", a.loginHandler)
 	r.Get("/logout", user.LogoutHandler)
+	r.Post("/login", user.LoginHandler)
 	r.Get("/qr", a.qrHandler)
 	r.Get("/qr/{id}/{cs}", user.Authenticate(a.scanHandler, a.loginHandler))
 	r.Post("/qr/{id}/{cs}", user.LoginHandler)
