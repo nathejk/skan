@@ -49,6 +49,15 @@ func (q *querier) GetAll(ctx context.Context, filter Filter) ([]*Person, error) 
 	return personnel, nil
 }
 
+func (q *querier) GetByPhone(ctx context.Context, phone types.PhoneNumber) (*Person, error) {
+	var userID types.UserID
+	query := `SELECT userId FROM personnel WHERE phone = ?`
+	args := []any{phone.Normalize()}
+	q.db.QueryRow(query, args...).Scan(&userID)
+
+	return q.GetByID(ctx, userID)
+}
+
 func (q *querier) GetByID(ctx context.Context, staffID types.UserID) (*Person, error) {
 	log.Printf("Inside GetByID( %q )", staffID)
 	if len(staffID) == 0 {
@@ -56,13 +65,14 @@ func (q *querier) GetByID(ctx context.Context, staffID types.UserID) (*Person, e
 		return nil, tables.ErrRecordNotFound
 	}
 
-	query := `SELECT t.userId, t.name, t.phone, t.email, t.groupName, t.korps, t.klan, t.signupStatus, t.tshirtSize, t.additionals
+	query := `SELECT t.userId, t.userType, t.name, t.phone, t.email, t.groupName, t.korps, t.klan, t.signupStatus, t.tshirtSize, t.additionals
 		FROM personnel t
 		WHERE t.userId = ?`
 	var t Person
 	var additionals []byte
 	err := q.db.QueryRow(query, staffID).Scan(
 		&t.ID,
+		&t.UserType,
 		&t.Name,
 		&t.Phone,
 		&t.Email,

@@ -18,6 +18,7 @@ func (c *consumer) Consumes() (subjs []streaminterface.Subject) {
 	return []streaminterface.Subject{
 		streaminterface.SubjectFromStr("NATHEJK:*.patrulje.*.signedup"),
 		streaminterface.SubjectFromStr("NATHEJK:*.patrulje.*.updated"),
+		streaminterface.SubjectFromStr("NATHEJK:*.patrulje.*.numberassigned"),
 		streaminterface.SubjectFromStr("NATHEJK:*.patrulje.*.started"),
 	}
 }
@@ -48,6 +49,18 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 
 		err := c.w.Consume(fmt.Sprintf(query, args...))
 		if err != nil {
+			log.Fatalf("Error consuming sql %q", err)
+		}
+
+	case msg.Subject().Match("NATHEJK.*.patrulje.*.numberassigned"):
+		var body messages.NathejkPatrolNumberAssigned
+		if err := msg.Body(&body); err != nil {
+			return err
+		}
+		query := "UPDATE patrulje SET teamNumber=%q WHERE teamId=%q"
+		args := []any{body.TeamNumber, body.TeamID}
+
+		if err := c.w.Consume(fmt.Sprintf(query, args...)); err != nil {
 			log.Fatalf("Error consuming sql %q", err)
 		}
 

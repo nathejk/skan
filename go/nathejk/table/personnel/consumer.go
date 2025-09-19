@@ -39,7 +39,7 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 			return nil
 		}
 		subject := msg.Subject().Parts()
-		args := []any{body.TeamID, subject[2], subject[1], body.Name, body.Phone, body.Email}
+		args := []any{body.TeamID, subject[2], subject[1], body.Name, body.Phone.Normalize(), body.Email}
 		sql := fmt.Sprintf("INSERT IGNORE INTO personnel SET userId=%q, userType=%q, year=%q, name=%q, phone=%q, email=%q", args...)
 		if err := c.w.Consume(sql); err != nil {
 			log.Fatalf("Error consuming sql %q", err)
@@ -53,7 +53,7 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		additionals, _ := json.Marshal(body.Additionals)
 		msg.Subject().Parts()
 		query := "UPDATE personnel SET name=%q, groupName=%q, korps=%q, klan=%q, phone=%q, email=%q, tshirtSize=%q, additionals=%q  WHERE userId=%q"
-		args := []any{body.Name, body.Group, string(body.Corps), body.Klan, body.Phone, body.Email, body.TshirtSize, additionals, body.UserID}
+		args := []any{body.Name, body.Group, string(body.Corps), body.Klan, body.Phone.Normalize(), body.Email, body.TshirtSize, additionals, body.UserID}
 
 		err := c.w.Consume(fmt.Sprintf(query, args...))
 		if err != nil {

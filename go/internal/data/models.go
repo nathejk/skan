@@ -11,6 +11,8 @@ import (
 	"nathejk.dk/nathejk/table/patrulje"
 	"nathejk.dk/nathejk/table/payment"
 	"nathejk.dk/nathejk/table/personnel"
+	"nathejk.dk/nathejk/table/qr"
+	"nathejk.dk/nathejk/table/senior"
 	"nathejk.dk/nathejk/table/spejder"
 )
 
@@ -26,10 +28,17 @@ type KlanInterface interface {
 type PatruljeInterface interface {
 	GetAll(context.Context, patrulje.Filter) ([]*patrulje.Patrulje, error)
 	GetByID(context.Context, types.TeamID) (*patrulje.Patrulje, error)
+	GetByNumber(context.Context, int) (*patrulje.Patrulje, error)
+}
+type SeniorInterface interface {
+	GetAll(context.Context, senior.Filter) ([]*senior.Senior, senior.Metadata, error)
+	GetByID(context.Context, types.MemberID) (*senior.Senior, error)
+	GetByPhone(context.Context, types.PhoneNumber) (*senior.Senior, error)
 }
 type PersonnelInterface interface {
 	GetAll(context.Context, personnel.Filter) ([]*personnel.Person, error)
 	GetByID(context.Context, types.UserID) (*personnel.Person, error)
+	GetByPhone(context.Context, types.PhoneNumber) (*personnel.Person, error)
 }
 type PaymentInterface interface {
 	GetAll(context.Context, types.TeamID) ([]*payment.Payment, error)
@@ -38,6 +47,9 @@ type PaymentInterface interface {
 type SpejderInterface interface {
 	GetAll(context.Context, spejder.Filter) ([]*spejder.Spejder, spejder.Metadata, error)
 	GetByID(context.Context, types.MemberID) (*spejder.Spejder, error)
+}
+type QrInterface interface {
+	GetByID(context.Context, types.QrID) (*qr.QR, error)
 }
 
 type Models struct {
@@ -75,10 +87,12 @@ type Models struct {
 		ConfirmBySecret(string) (types.TeamID, error)
 	}
 	Klan      KlanInterface
+	Senior    SeniorInterface
 	Patrulje  PatruljeInterface
 	Personnel PersonnelInterface
 	Payment   PaymentInterface
 	Spejder   SpejderInterface
+	QR        QrInterface
 }
 
 func NewModels(db *sql.DB, klan KlanInterface, patrulje PatruljeInterface, personnel PersonnelInterface, payment PaymentInterface, spejder SpejderInterface) Models {

@@ -1,43 +1,28 @@
 {{define "title"}}Nathejk{{end}}
 
 {{define "content"}}
-<script type="text/javascript">
- 
-  function getLocation(pos)
-  {
-    var latitde = pos.coords.latitude;
-    var longitude = pos.coords.longitude;
-    location.href = '?location=' + latitde + ':' + longitude;
-  }
-  function unknownLocation()
-  {
-        var coor = prompt('Indtast dit kortkoordinat:');
-        if (coor) {
-            location.href = '?location=' + coor;
-        } else {
-            alert('du mangler at opgive koordinat, din fangst er ikke registreret');
-        }
-  }
-if (navigator && navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(getLocation, unknownLocation);
-} else {
-  unknownLocation();
-}
-</script>
-
-    <div class="starter-template">
-<!-- button onclick="unknownLocation()">Tryk her</button -->
-<h1>Finder position</h1>
-<i class="icon-spinner icon-spin icon-5x"></i>
+<style>
+#main .working, #main .success, #main.working .error, #main.success .error  { display:none; } 
+#main.working .working, #main.success .success { display:block; }
+</style>
+<main id="main">
+    <div class="error starter-template">
+        <p>Din fangst er ikke registreret.</p>
+    </div>
+    <div class="working starter-template">
+        <h1>Finder position</h1>
+        <i class="icon-spinner icon-spin icon-5x"></i>
     </div>
 
-      <div class="starter-template">
+      <div class="success starter-template">
 
-        <h1>{{ .armNumber }}. {{ .team }}</h1>
+        <h1>{{ .armNumber }}. {{ .team.Name }}</h1>
         <div class="row">
             <div class="col-md-3"></div>
             <img src="{{ .photo }}" alt="Billede af patruljen" class="img-rounded col-md-6">
         </div>
+                <p class="lead">Din scanning er registreret</p>
+            <div style="display:hidden">
         {{ if .isBandit }}
             {{ if eq .catchCount 1 }}
                 <p class="lead">BINGO, det er først gang at denne patrulje bliver fanget</p>
@@ -48,5 +33,53 @@ if (navigator && navigator.geolocation) {
             <p class="lead">Denne patrulje er blevet fanget {{ .catchCount }} gange - i alt er de nu blevet scannet {{ .scanCount }} gange</p>
         {{ end }}
         {{ if ne .remark "" }}<p class="lead" style="color:red">{{ .remark }}</p>{{ end }}
+            </div>
       </div>
+    </main>
+<script type="text/javascript">
+ // Make an HTTP PUT Request
+async function  put( data) {
+    data.qrId = '{{ .qr.ID }}'
+       data.teamNumber = {{ .team.TeamNumber }} | 0
+       const url = '/register'
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+    
+       document.getElementById('main').className = response.ok ? 'success' : ''
+}
+
+function register(data) {
+     put(data)
+}
+  function getLocation(pos)
+  {
+      register({
+    latitde: pos.coords.latitude,
+    longitude: pos.coords.longitude,
+      })
+    //location.href = '?location=' + latitde + ':' + longitude;
+  }
+  function unknownLocation()
+  {
+        var coor = prompt('Indtast dit kortkoordinat:');
+        if (coor) {
+            //location.href = '?location=' + coor;
+            register({prompt: coor})
+        } else {
+            document.getElementById('main').className = ''
+            //alert('du mangler at opgive koordinat, din fangst er ikke registreret');
+        }
+  }
+document.getElementById('main').className = 'working'
+if (navigator && navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(getLocation, unknownLocation);
+} else {
+  unknownLocation();
+}
+</script>
 {{end}}

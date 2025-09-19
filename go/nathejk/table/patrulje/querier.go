@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/nathejk/shared-go/types"
@@ -67,7 +68,6 @@ func (q *querier) GetByID(ctx context.Context, teamID types.TeamID) (*Patrulje, 
 
 	query := `SELECT p.teamId, p.teamNumber, p.name, p.groupName, p.korps, p.liga, p.memberCount
 		FROM patrulje p
-		JOIN patruljestatus ps ON p.teamId = ps.teamID
 		WHERE p.teamId = ?`
 	var p Patrulje
 	err := q.db.QueryRow(query, teamID).Scan(
@@ -88,6 +88,17 @@ func (q *querier) GetByID(ctx context.Context, teamID types.TeamID) (*Patrulje, 
 		}
 	}
 	return &p, nil
+}
+
+func (q *querier) GetByNumber(ctx context.Context, teamNumber int) (*Patrulje, error) {
+	if teamNumber == 0 {
+		return nil, tables.ErrRecordNotFound
+	}
+	query := `SELECT teamId FROM patrulje WHERE teamNumber = ?`
+	var teamID types.TeamID
+	q.db.QueryRow(query, teamNumber).Scan(&teamID)
+	log.Printf("GetByNumber: %d %q", teamNumber, teamID)
+	return q.GetByID(ctx, teamID)
 }
 
 /*

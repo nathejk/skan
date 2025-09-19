@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS scan (
+  id INT(10) UNSIGNED NOT NULL,
+  teamId VARCHAR(99)  DEFAULT NULL,
+  teamNumber INT(10) unsigned DEFAULT NULL,
+  createdAt datetime DEFAULT NULL,
+  createdBy VARCHAR(99) DEFAULT NULL,
+  createdByPhone VARCHAR(20) COLLATE utf8_unicode_ci DEFAULT NULL,
+  latitude VARCHAR(30) NOT NULL DEFAULT "",
+  longitude VARCHAR(30) NOT NULL DEFAULT ""
+)

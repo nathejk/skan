@@ -7,8 +7,6 @@ import (
 	"github.com/nathejk/shared-go/messages"
 	"nathejk.dk/pkg/tablerow"
 	"nathejk.dk/superfluids/streaminterface"
-
-	_ "embed"
 )
 
 type consumer struct {
@@ -43,7 +41,7 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 			body.PostalCode,
 			body.City,
 			body.Email,
-			body.Phone,
+			body.Phone.Normalize(),
 			body.BirthDate,
 			body.TShirtSize,
 			body.Diet,

@@ -25,6 +25,25 @@ services:
       traefik.docker.network: traefik
       traefik.http.routers.skan.rule: Host(`skan.dev.nathejk.dk`) || Host(`skan.local.nathejk.dk`) || HostRegexp(`.+\.skan\..+\.nathejk\.dk`)
 
+  prod:
+    build:
+      context: .
+      target: prod
+      dockerfile: docker/Dockerfile
+    networks:
+    - local
+    - jetstream
+    environment:
+      #GO_BUILD_FLAGS: -race
+      JETSTREAM_DSN: nats://dev.nathejk.dk:4222
+      DB_DSN: root:ib@tcp(mysql:3306)/skan?parseTime=true
+      SMS_DSN: cpsms://TOKEN@api.cpsms.dk
+      REDIS_ADDR: redis:6379
+      SECRET: nh2025
+    depends_on:
+    - gw
+    - mysql
+
   api:
     build:
       context: .

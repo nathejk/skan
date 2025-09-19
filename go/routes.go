@@ -3,37 +3,81 @@ package main
 import (
 	"embed"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"hash/adler32"
 	"html/template"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/nathejk/shared-go/types"
+	"nathejk.dk/internal/login"
 )
 
 //go:embed templates/*
 var fs embed.FS
 
 func (a *App) indexHandler(w http.ResponseWriter, r *http.Request) {
-	ts, err := template.ParseFS(fs, "base.html", "index.html")
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/index.html")
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error (index)", http.StatusInternalServerError)
 		return
 	}
 	if err := ts.ExecuteTemplate(w, "base", nil); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/map.html")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Internal Server Error (map) %#v", err), http.StatusInternalServerError)
+		return
+	}
+	number, _ := strconv.Atoi(r.URL.Query().Get("number"))
+	team, _ := a.models.Patrulje.GetByNumber(r.Context(), number)
+	data := map[string]any{
+		"qrid":     chi.URLParam(r, "id"),
+		"checksum": chi.URLParam(r, "cs"),
+		"confirm":  false,
+		"team":     team,
+		"photo":    "/groupphoto.jpg",
+	}
+	if team != nil {
+		data["confirm"] = true
+		data["armNumber"] = fmt.Sprintf("%s-%d", team.TeamNumber, team.MemberCount)
+	}
+
+	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+func (a *App) doMapHandler(w http.ResponseWriter, r *http.Request) {
+	user, _ := login.UserFromRequest(r)
+	if user == nil {
+		http.Error(w, "No user", http.StatusForbidden)
+		return
+	}
+	qrID := types.QrID(chi.URLParam(r, "id"))
+	cs, _ := strconv.Atoi(chi.URLParam(r, "cs"))
+	if uint32(cs) != Checksum(qrID) {
+		http.Error(w, "Malformed request", http.StatusExpectationFailed)
+		return
+	}
+	teamNumber, _ := strconv.Atoi(r.FormValue("confirmed"))
+	team, _ := a.models.Patrulje.GetByNumber(r.Context(), teamNumber)
+	if team == nil {
+		http.Error(w, "Patrulje not found", http.StatusNotFound)
+		return
+	}
+	a.commands.QR.Register(qrID, *team, *user)
+	http.Redirect(w, r, fmt.Sprintf("/qr/%s/%d", qrID, cs), http.StatusSeeOther)
 }
 
 func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
-	ts, err := template.ParseFS(fs, "base.html", "login.html")
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/login.html")
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error (login)", http.StatusInternalServerError)
 		return
 	}
 	if err := ts.ExecuteTemplate(w, "base", nil); err != nil {
@@ -41,48 +85,44 @@ func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *App) logoutHandler(w http.ResponseWriter, r *http.Request) {
-	c := &http.Cookie{
-		Name:    "exampleCookie",
-		Value:   "",
-		Path:    "/",
-		Expires: time.Unix(0, 0),
-
-		//HttpOnly: true,
-	}
-
-	http.SetCookie(w, c)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
-func (a *App) doLoginHandler(w http.ResponseWriter, r *http.Request) {
-	cookie := http.Cookie{
-		Name:   "exampleCookie",
-		Value:  "Hello world!",
-		Path:   "/",
-		MaxAge: 3600 * 48,
-		//HttpOnly: true,
-		//Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	}
-
-	http.SetCookie(w, &cookie)
-	http.Redirect(w, r, r.URL.Path, http.StatusSeeOther)
-}
-
 func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
-	ts, err := template.ParseFS(fs, "base.html", "coordinates.html")
+	user, _ := login.UserFromRequest(r)
+	if user == nil {
+		http.Error(w, "No user", http.StatusForbidden)
+		return
+	}
+	qrID := types.QrID(chi.URLParam(r, "id"))
+	cs, _ := strconv.Atoi(chi.URLParam(r, "cs"))
+	if uint32(cs) != Checksum(qrID) {
+		http.Error(w, "Malformed request", http.StatusExpectationFailed)
+		return
+	}
+	qr, err := a.models.QR.GetByID(r.Context(), qrID)
+	log.Printf("Scanned %s %#v %#v", qrID, qr, err)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		a.commands.QR.Found(qrID, *user)
+		http.Redirect(w, r, fmt.Sprintf("/map/%s/%d", qrID, cs), http.StatusSeeOther)
+		return
+	}
+
+	patrulje, err := a.models.Patrulje.GetByNumber(r.Context(), qr.TeamNumber)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("No patrulje found %#v", err), http.StatusFailedDependency)
+		return
+	}
+
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/coordinates.html")
+	if err != nil {
+		http.Error(w, "Internal Server Error (scan)", http.StatusInternalServerError)
 		return
 	}
 	data := map[string]any{
-		"armNumber":  "10-4",
-		"team":       "Vaskebjørne",
+		"qr":         qr,
+		"armNumber":  fmt.Sprintf("%s-%d", patrulje.TeamNumber, patrulje.MemberCount),
+		"team":       patrulje,
 		"scanCount":  10,
 		"catchCount": 1,
 		"photo":      "/groupphoto.jpg",
-		"remark":     "Patruljen har ondt i røven",
 		"isBandit":   true,
 	}
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
@@ -94,16 +134,16 @@ func (a *App) qrHandler(w http.ResponseWriter, r *http.Request) {
 	max, _ := strconv.Atoi(r.URL.Query().Get("n"))
 	w.Write([]byte("id,url\n"))
 	for i := 1; i <= max; i++ {
-		cs := adler32.Checksum([]byte(fmt.Sprintf("%d:%s", i, os.Getenv("SECRET"))))
+		cs := Checksum(types.QrID(fmt.Sprintf("%d", i)))
 		w.Write([]byte(fmt.Sprintf("%d,https://%s/qr/%d/%d\n", i, r.Host, i, cs)))
 	}
 }
 
 func (a *App) aboutHandler(w http.ResponseWriter, r *http.Request) {
-	ts, err := template.ParseFS(fs, "base.html", "about.html")
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/about.html")
 	if err != nil {
 		log.Print(err.Error())
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error (about)", http.StatusInternalServerError)
 		return
 	}
 
@@ -113,19 +153,56 @@ func (a *App) aboutHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
+	type input struct {
+		QrID       types.QrID `json:"qrId"`
+		TeamNumber int        `json:"teamNumber"`
+		Prompt     string     `json:"prompt"`
+		Latitude   string     `json:"latitude"`
+		Longitude  string     `json:"longitude"`
+	}
+	var in input
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	patrulje, err := a.models.Patrulje.GetByNumber(r.Context(), in.TeamNumber)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("No patrulje found %#v", err), http.StatusFailedDependency)
+		return
+	}
+	user, _ := login.UserFromRequest(r)
+	if user == nil {
+		http.Error(w, "No user", http.StatusForbidden)
+		return
+	}
+	if err := a.commands.QR.Scan(in.QrID, *patrulje, *user, in.Latitude, in.Longitude); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(`{"status":"ok"}`))
+}
 func (a *App) routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/healthcheck", a.HealthcheckHandler)
 	// Route for index page
 	r.Get("/", a.indexHandler)
 
+	user := login.New(a.models)
+
 	// Route for about page
 	r.Get("/about", a.aboutHandler)
-	r.Get("/login", a.loginHandler)
-	r.Get("/logout", a.logoutHandler)
+	//r.Get("/login", a.loginHandler)
+	r.Get("/logout", user.LogoutHandler)
 	r.Get("/qr", a.qrHandler)
-	r.Get("/qr/{id}/{cs}", a.authenticate(a.scanHandler))
-	r.Post("/qr/{id}/{cs}", a.doLoginHandler)
+	r.Get("/qr/{id}/{cs}", user.Authenticate(a.scanHandler, a.loginHandler))
+	r.Post("/qr/{id}/{cs}", user.LoginHandler)
+	r.Get("/map/{id}/{cs}", user.Authenticate(a.mapHandler, a.loginHandler))
+	r.Post("/map/{id}/{cs}", user.Authenticate(a.doMapHandler, a.loginHandler))
+	r.Put("/register", user.Authenticate(a.registerHandler, a.loginHandler))
 
 	fileServer := http.FileServer(http.Dir("/webroot/"))
 
@@ -133,28 +210,6 @@ func (a *App) routes() http.Handler {
 		http.StripPrefix("/", fileServer).ServeHTTP(w, r)
 	})
 	return r
-}
-
-func (a *App) authenticate(next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := r.Cookie("exampleCookie")
-		if err != nil {
-			switch {
-			case errors.Is(err, http.ErrNoCookie):
-				//http.Error(w, "cookie not found", http.StatusBadRequest)
-				a.loginHandler(w, r)
-			default:
-				log.Println(err)
-				http.Error(w, "server error", http.StatusInternalServerError)
-			}
-			return
-		}
-
-		// Echo out the cookie value in the response body.
-		//w.Write([]byte(cookie.Value))
-
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (a *App) HealthcheckHandler(w http.ResponseWriter, r *http.Request) {

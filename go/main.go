@@ -2,16 +2,22 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"hash/adler32"
 	"log"
 	"os"
 
+	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/data"
 	"nathejk.dk/internal/jsonlog"
 	"nathejk.dk/internal/logging"
-	"nathejk.dk/nathejk/table"
+	"nathejk.dk/nathejk/commands"
 	"nathejk.dk/nathejk/table/klan"
 	"nathejk.dk/nathejk/table/patrulje"
 	"nathejk.dk/nathejk/table/personnel"
+	"nathejk.dk/nathejk/table/qr"
+	"nathejk.dk/nathejk/table/scan"
+	"nathejk.dk/nathejk/table/senior"
 	"nathejk.dk/pkg/sqlpersister"
 	"nathejk.dk/superfluids/jetstream"
 	"nathejk.dk/superfluids/xstream"
@@ -45,58 +51,30 @@ func main() {
 	sqlw := sqlpersister.New(db.DB())
 
 	klantable := klan.New(sqlw, db.DB())
+	seniortable := senior.New(sqlw, db.DB())
 	patruljetable := patrulje.New(sqlw, db.DB())
 	personneltable := personnel.New(sqlw, db.DB())
+	qrtable := qr.New(sqlw, db.DB())
+	scantable := scan.New(sqlw, db.DB())
 
 	mux := xstream.NewMux(js)
-	mux.AddConsumer(klantable, table.NewSenior(sqlw), patruljetable, personneltable)
+	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable)
 	if err := mux.Run(ctx); err != nil {
 		logger.PrintFatal(err, nil)
 	}
 
 	app.models = data.Models{
 		Klan:      klantable,
+		Senior:    seniortable,
 		Patrulje:  patruljetable,
 		Personnel: personneltable,
+		QR:        qrtable,
 	}
+	app.commands = commands.New(js, app.models)
 
 	app.Run(ctx)
 }
 
-/*
-// withAuth middleware checks session for valid access token
-func withAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		session, err := store.Get(r, sessionName)
-		if err != nil {
-			http.Error(w, "Failed to get session", http.StatusInternalServerError)
-			return
-		}
-
-		tokenInfo, ok := session.Values["token"].(*TokenInfo)
-		if !ok || tokenInfo.AccessToken == "" {
-			http.Redirect(w, r, "/", http.StatusFound)
-			return
-		}
-
-		if time.Now().After(tokenInfo.Expiry) {
-			// TODO: Implement token refresh logic using RefreshToken here
-			http.Error(w, "Access token expired, refresh required", http.StatusUnauthorized)
-			return
-		}
-
-		// Proceed to handler
-		next(w, r)
-	}
+func Checksum(id types.QrID) uint32 {
+	return adler32.Checksum([]byte(fmt.Sprintf("%s:%s", id, os.Getenv("SECRET"))))
 }
-
-// handleLogout clears the session
-func handleLogout(w http.ResponseWriter, r *http.Request) {
-	session, err := store.Get(r, sessionName)
-	if err == nil {
-		session.Options.MaxAge = -1 // delete cookie
-		session.Save(r, w)
-	}
-	http.Redirect(w, r, "/", http.StatusFound)
-}
-*/

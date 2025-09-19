@@ -12,6 +12,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"nathejk.dk/internal/data"
+	"nathejk.dk/nathejk/commands"
 )
 
 // Config holds application-level configuration
@@ -41,7 +42,8 @@ type App struct {
 	Session *scs.SessionManager
 	//template  *template.Template
 	//jetstream streaminterface.Stream
-	models data.Models
+	models   data.Models
+	commands commands.Commands
 }
 
 func (a *App) configure() {
