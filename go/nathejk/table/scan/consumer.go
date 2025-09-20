@@ -26,11 +26,12 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
-		sql := "INSERT IGNORE INTO scan SET qrId=%q, teamId=%q, teamNumber=%q, scannerId=%q, scannerPhone=%q, uts=%q, latitude=%q, longitude=%q"
+		sql := "INSERT IGNORE INTO scan SET qrId=%q, teamId=%q, teamNumber=%q, scannerId=%q, scannerPhone=%q, uts=%d, latitude=%q, longitude=%q"
 		args := []any{body.QrID, body.TeamID, body.TeamNumber, body.ScannerID, body.ScannerPhone, msg.Time().Unix(), body.Location.Latitude, body.Location.Longitude}
 		if err := c.w.Consume(fmt.Sprintf(sql, args...)); err != nil {
 			log.Fatalf("Error consuming sql %q", err)
 		}
+		log.Printf("UNIXTIME %#v %d", msg.Time(), msg.Time().Unix())
 
 	default:
 		log.Printf("Unhandled message %q", msg.Subject().Subject())

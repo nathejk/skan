@@ -47,9 +47,6 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 	for _, s := range scans {
 		data := map[string]string{}
 		patrulje, _ := a.models.Patrulje.GetByID(r.Context(), s.TeamID)
-		/*if senior != nil {
-			data["scanner"] = senior.Name
-		}*/
 		senior, _ := a.models.Senior.GetByID(r.Context(), types.MemberID(s.ScannerID))
 		if senior != nil {
 			data["scanner"] = senior.Name
@@ -73,6 +70,8 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 			Latitude:   s.Latitude,
 			Longitude:  s.Longitude,
 			Scanner:    data["scanner"],
+			Lok:        data["lok"],
+			Role:       data["role"],
 		})
 	}
 	jsonstr, _ := json.Marshal(geo)
