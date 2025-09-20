@@ -1,10 +1,15 @@
 CREATE TABLE IF NOT EXISTS scan (
-  id INT(10) UNSIGNED NOT NULL,
-  teamId VARCHAR(99)  DEFAULT NULL,
-  teamNumber INT(10) unsigned DEFAULT NULL,
-  createdAt datetime DEFAULT NULL,
-  createdBy VARCHAR(99) DEFAULT NULL,
-  createdByPhone VARCHAR(20) COLLATE utf8_unicode_ci DEFAULT NULL,
-  latitude VARCHAR(30) NOT NULL DEFAULT "",
-  longitude VARCHAR(30) NOT NULL DEFAULT ""
-)
+    id VARCHAR(99),
+    year VARCHAR(99),
+    qrId VARCHAR(99) NOT NULL,
+    teamId VARCHAR(99) NOT NULL,
+    teamNumber VARCHAR(99) NOT NULL,
+    scannerId VARCHAR(99) NOT NULL,
+    scannerPhone VARCHAR(99) NOT NULL,
+    uts INT NOT NULL DEFAULT 0,
+    latitude VARCHAR(99) NOT NULL,
+    longitude VARCHAR(99) NOT NULL,
+    KEY year_teamId (year, teamId, uts),
+    KEY year_scannerId (year, scannerId, uts),
+    PRIMARY KEY(qrId, uts)
+);

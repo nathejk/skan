@@ -3,7 +3,6 @@ package scan
 import (
 	"database/sql"
 	"log"
-	"time"
 
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/pkg/tablerow"
@@ -11,14 +10,15 @@ import (
 	_ "embed"
 )
 
-type QR struct {
-	ID         types.QrID   `json:"id"`
-	TeamID     types.TeamID `json:"teamId"`
-	TeamNumber int          `json:"teamNumber"`
-	CreatedAt  time.Time    `json:"mapCreatedAt"`
-	CreatedBy  string       `json:"mapCreatedBy"`
-	Latitude   string       `json:"latitude"`
-	Longitude  string       `json:"longitude"`
+type Scan struct {
+	QrID         types.QrID   `json:"qrId"`
+	TeamID       types.TeamID `json:"teamId"`
+	TeamNumber   int          `json:"teamNumber"`
+	ScannerID    string       `json:"scannerId"`
+	ScannerPhone string       `json:"scannerPhone"`
+	Uts          int64        `json:"uts"`
+	Latitude     string       `json:"latitude"`
+	Longitude    string       `json:"longitude"`
 }
 
 type table struct {

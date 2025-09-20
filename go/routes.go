@@ -8,10 +8,12 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/login"
+	"nathejk.dk/nathejk/table/scan"
 )
 
 //go:embed templates/*
@@ -28,6 +30,56 @@ func (a *App) indexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
+	type row struct {
+		ID         string `json:"id"`
+		Lok        string `json:"lok"`
+		TeamNumber string `json:"holdnummer"`
+		TeamName   string `json:"patruljenavn"`
+		Role       string `json:"role"`
+		Timestamp  string `json:"tid"`
+		Latitude   string `json:"lat"`
+		Longitude  string `json:"lng"`
+		Scanner    string `json:"scanner"`
+	}
+	scans, _ := a.models.Scan.GetAll(r.Context(), scan.Filter{})
+	geo := []row{}
+	for _, s := range scans {
+		data := map[string]string{}
+		patrulje, _ := a.models.Patrulje.GetByID(r.Context(), s.TeamID)
+		/*if senior != nil {
+			data["scanner"] = senior.Name
+		}*/
+		senior, _ := a.models.Senior.GetByID(r.Context(), types.MemberID(s.ScannerID))
+		if senior != nil {
+			data["scanner"] = senior.Name
+			data["role"] = "Bandit"
+			klan, _ := a.models.Klan.GetByID(r.Context(), senior.TeamID)
+			if klan != nil {
+				data["lok"] = fmt.Sprintf("LOK %s", klan.Lok)
+			}
+		}
+		person, _ := a.models.Personnel.GetByID(r.Context(), types.UserID(s.ScannerID))
+		if person != nil {
+			data["scanner"] = person.Name
+			if v, ok := person.Additionals["department"].(string); ok {
+				data["role"] = v
+			}
+		}
+		geo = append(geo, row{
+			TeamNumber: fmt.Sprintf("%d", s.TeamNumber),
+			TeamName:   patrulje.Name,
+			Timestamp:  time.Unix(s.Uts, 0).Format(time.RFC3339),
+			Latitude:   s.Latitude,
+			Longitude:  s.Longitude,
+			Scanner:    data["scanner"],
+		})
+	}
+	jsonstr, _ := json.Marshal(geo)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(jsonstr)
+}
 func (a *App) doIndexHandler(w http.ResponseWriter, r *http.Request) {
 	teamNumber, _ := strconv.Atoi(r.FormValue("number"))
 	team, _ := a.models.Patrulje.GetByNumber(r.Context(), teamNumber)
@@ -236,6 +288,7 @@ func (a *App) routes() http.Handler {
 	r.Get("/logout", user.LogoutHandler)
 	r.Post("/login", user.LoginHandler)
 	r.Get("/qr", a.qrHandler)
+	r.Get("/geo", a.geoHandler)
 	r.Get("/qr/{id}/{cs}", user.Authenticate(a.scanHandler, a.loginHandler))
 	r.Post("/qr/{id}/{cs}", user.LoginHandler)
 	r.Get("/map/{id}/{cs}", user.Authenticate(a.mapHandler, a.loginHandler))

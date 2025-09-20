@@ -12,6 +12,7 @@ import (
 	"nathejk.dk/nathejk/table/payment"
 	"nathejk.dk/nathejk/table/personnel"
 	"nathejk.dk/nathejk/table/qr"
+	"nathejk.dk/nathejk/table/scan"
 	"nathejk.dk/nathejk/table/senior"
 	"nathejk.dk/nathejk/table/spejder"
 )
@@ -50,6 +51,9 @@ type SpejderInterface interface {
 }
 type QrInterface interface {
 	GetByID(context.Context, types.QrID) (*qr.QR, error)
+}
+type ScanInterface interface {
+	GetAll(context.Context, scan.Filter) ([]*scan.Scan, error)
 }
 
 type Models struct {
@@ -93,6 +97,7 @@ type Models struct {
 	Payment   PaymentInterface
 	Spejder   SpejderInterface
 	QR        QrInterface
+	Scan      ScanInterface
 }
 
 func NewModels(db *sql.DB, klan KlanInterface, patrulje PatruljeInterface, personnel PersonnelInterface, payment PaymentInterface, spejder SpejderInterface) Models {

@@ -69,6 +69,7 @@ func main() {
 		Patrulje:  patruljetable,
 		Personnel: personneltable,
 		QR:        qrtable,
+		Scan:      scantable,
 	}
 	app.commands = commands.New(js, app.models)
 
