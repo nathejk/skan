@@ -32,7 +32,7 @@ func (a *App) indexHandler(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 	type row struct {
-		ID         string `json:"id"`
+		ID         int    `json:"id"`
 		Lok        string `json:"lok"`
 		TeamNumber string `json:"holdnummer"`
 		TeamName   string `json:"patruljenavn"`
@@ -63,7 +63,10 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 				data["role"] = v
 			}
 		}
+		qrID, _ := strconv.Atoi(string(s.QrID))
+		ID, _ := strconv.Atoi(fmt.Sprintf("%d%05d", s.Uts, qrID))
 		geo = append(geo, row{
+			ID:         ID,
 			TeamNumber: fmt.Sprintf("%d", s.TeamNumber),
 			TeamName:   patrulje.Name,
 			Timestamp:  time.Unix(s.Uts, 0).Format(time.RFC3339),
@@ -76,7 +79,7 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonstr, _ := json.Marshal(geo)
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusOK)
 	w.Write(jsonstr)
 }
 func (a *App) doIndexHandler(w http.ResponseWriter, r *http.Request) {
