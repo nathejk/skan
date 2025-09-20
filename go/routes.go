@@ -45,6 +45,9 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 	scans, _ := a.models.Scan.GetAll(r.Context(), scan.Filter{})
 	geo := []row{}
 	for _, s := range scans {
+		if (s.Latitude == "") || (s.Longitude == "") {
+			continue
+		}
 		data := map[string]string{}
 		patrulje, _ := a.models.Patrulje.GetByID(r.Context(), s.TeamID)
 		senior, _ := a.models.Senior.GetByID(r.Context(), types.MemberID(s.ScannerID))
