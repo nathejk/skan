@@ -31,7 +31,6 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		if err := c.w.Consume(fmt.Sprintf(sql, args...)); err != nil {
 			log.Fatalf("Error consuming sql %q", err)
 		}
-		log.Printf("UNIXTIME %#v %d", msg.Time(), msg.Time().Unix())
 
 	default:
 		log.Printf("Unhandled message %q", msg.Subject().Subject())

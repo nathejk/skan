@@ -59,7 +59,6 @@ func (q *querier) GetByPhone(ctx context.Context, phone types.PhoneNumber) (*Per
 }
 
 func (q *querier) GetByID(ctx context.Context, staffID types.UserID) (*Person, error) {
-	log.Printf("Inside GetByID( %q )", staffID)
 	if len(staffID) == 0 {
 		log.Printf("not id found %q", staffID)
 		return nil, tables.ErrRecordNotFound
