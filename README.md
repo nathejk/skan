@@ -246,6 +246,10 @@ Short, honest list — details and more items in `.rules`.
 - **`/geo` and `/qr` are wide open** — no login and no token — which breaks the
   fair-game rule: `/geo` is a live map of every scan in the race, and `/qr?n=N`
   hands out working sticker URLs for codes that haven't been distributed yet.
+- **Every patrol shows the same stock photo.** Both the scan page and the
+  registration confirmation hardcode `/groupphoto.jpg`, so the "is this the right
+  patrol?" confirmation currently confirms nothing. The `photo` and `photocover`
+  projections that would fix it are copied in but not wired up.
 - **Nothing guards against accidental rescans**; the 30-minute confirmation isn't
   built.
 - **A phone number registered as both crew and senior logs in as crew.** It
@@ -270,7 +274,7 @@ than writing to the database directly.
 
 Work is tracked on a file-based board in `roadmap/tasks/` — `open/`, `doing/` and
 `done/` folders holding one Markdown file per task, with the conventions in
-`roadmap/tasks/TASKS.md`. The known gaps listed above are tasks 001–004.
+`roadmap/tasks/TASKS.md`. The known gaps listed above are tasks 001–006.
 
 ## Credits
 

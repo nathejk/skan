@@ -59,6 +59,22 @@ CQRS/event-sourcing participant on NATS JetStream.
   `personnel` are populated from events published by other services (mainly
   `hq`/tilmelding). Skan owns only `qr` and `scan`.
 
+### Photographs (`photo`, `photocover`)
+
+`nathejk/table/photo` and `nathejk/table/photocover` are present but **wired to
+nothing** — see task 005. Two things to know before touching them:
+
+- `photo` is a **verbatim copy of the `foto` service's package**, bound for
+  `shared-go`. Do not edit it; adapt around it. `photocover` is `hq`'s entity and
+  must be constructed here with a **nil publisher** — choosing a cover is not a
+  scanner's job.
+- Both are built on **`github.com/jrgensen/cqrs`**, which is absent from `go.mod`
+  and is a different abstraction from this repo's `streaminterface` + `tablerow` +
+  `xstream.Mux`. They do not compile here yet, and an adapter is needed.
+- They store **content-hash refs, never bytes**, and `photo` never exposes the
+  original (it carries the camera's metadata, including GPS). Rendering a photo
+  therefore needs a byte source that does not exist in this service yet.
+
 ### Event subjects
 
 Pattern: `NATHEJK.{year}.{entity}.{id}.{event}`
@@ -162,6 +178,7 @@ skan/
     ├── nathejk/
     │   ├── commands/        # write side (qr.go is the live one; team.go is inherited)
     │   └── table/           # projections: qr, scan, patrulje, klan, senior, personnel
+    │                     #   + photo, photocover — copied in, not yet wired (task 005)
     ├── pkg/sqlpersister/    # executes raw SQL strings for consumers
     ├── pkg/tablerow/        # Consumer / SQLTableRow interfaces
     └── superfluids/         # streaming abstractions: streaminterface, jetstream, xstream
@@ -363,7 +380,9 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   `scan.Filter{YearSlug: …}` only works via its empty-string bypass.
 - The `prod` Dockerfile stage copies the binary but **not** `webroot/`, while
   `routes.go` serves `/webroot` — static files are missing in production images.
-- The year slug (`2025`) is hardcoded in `commands.NewQR`.
+- The year slug (`2025`) is hardcoded in `commands.NewQR`. Once `photo`/
+  `photocover` are wired (task 005) this stops being cosmetic: their reads are keyed
+  by year, so a wrong year silently means "no photo".
 - Consumers `log.Fatalf` on a SQL error, i.e. a bad row kills the process.
 - `go.mod` lists `go-chi/chi/v5` as `// indirect` although it is a direct
   dependency; `go mod tidy` would fix it.
@@ -376,10 +395,18 @@ Tasks live in `roadmap/tasks/{open,doing,done}/` per the org-wide file-based
 kanban system; `roadmap/tasks/TASKS.md` holds the conventions. Read it before
 picking up, creating or updating a task.
 
-The four decided-but-unimplemented items described above are tracked as tasks
-001–004. When you implement one, work the task file as you go rather than
-retro-filling it, and update the *Known deviations* list here once the deviation
-is actually gone.
+| ID | Title | Priority | Depends on |
+|---|---|---|---|
+| 001 | Resolve scanner role from phone number at login | high | — |
+| 002 | Protect `/qr` and `/geo` with a secret token | high | — |
+| 003 | Split the scan-result page by role, real counts | high | 001 |
+| 004 | Confirmation guard against accidental rescans | medium | — |
+| 005 | Wire up the `photo` and `photocover` projections | high | — |
+| 006 | Show the cover photo + confirm identity before registering | high | 005 |
+
+The decided-but-unimplemented behaviours described above are tracked there. When
+you implement one, work the task file as you go rather than retro-filling it, and
+update the *Known deviations* list here once the deviation is actually gone.
 
 PRD folders (`roadmap/prd/{draft,doing,done}/`) do not exist yet — create them via
 the `prd` skill if a change needs a spec first.
