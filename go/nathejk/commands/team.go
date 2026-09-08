@@ -24,13 +24,13 @@ type team struct {
 	yearSlug     string
 }
 
-func NewTeam(p streaminterface.Publisher, q teamQuerier) *team {
+func NewTeam(p streaminterface.Publisher, q teamQuerier, yearSlug string) *team {
 	return &team{
 		p: p,
 		q: q,
 
 		producerSlug: "hq-api",
-		yearSlug:     "2025",
+		yearSlug:     yearSlug,
 	}
 }
 
@@ -193,7 +193,7 @@ func (c *team) StartPatrulje(teamID types.TeamID, members []StartPatruljeMember)
 }
 
 func (c *team) UpdateKlan(teamID types.TeamID, team Klan, members []Senior) error {
-	msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.klan.%s.updated", "2025", teamID)))
+	msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.klan.%s.updated", c.yearSlug, teamID)))
 	msg.SetBody(&messages.NathejkKlanUpdated{
 		TeamID:    teamID,
 		Name:      team.Name,
@@ -210,7 +210,7 @@ func (c *team) UpdateKlan(teamID types.TeamID, team Klan, members []Senior) erro
 		return nil
 	}
 	if c.q.RequestedSeniorCount() > 115 {
-		msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.klan.%s.status.changed", "2025", teamID)))
+		msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.klan.%s.status.changed", c.yearSlug, teamID)))
 		msg.SetBody(&messages.NathejkKlanStatusChanged{TeamID: teamID, Status: types.SignupStatusOnHold})
 		msg.SetMeta(&messages.Metadata{Producer: "tilmelding-api"})
 		if (klan.Status != types.SignupStatusPay) && (klan.Status != types.SignupStatusPaid) {
@@ -220,7 +220,7 @@ func (c *team) UpdateKlan(teamID types.TeamID, team Klan, members []Senior) erro
 		}
 	}
 	if klan.Status == "" {
-		msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.klan.%s.status.changed", "2025", teamID)))
+		msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.klan.%s.status.changed", c.yearSlug, teamID)))
 		msg.SetBody(&messages.NathejkKlanStatusChanged{TeamID: teamID, Status: types.SignupStatusPay})
 		msg.SetMeta(&messages.Metadata{Producer: "tilmelding-api"})
 		if err := c.p.Publish(msg); err != nil {
@@ -235,7 +235,7 @@ func (c *team) UpdateKlan(teamID types.TeamID, team Klan, members []Senior) erro
 
 	for _, m := range members {
 		if m.Deleted {
-			msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.senior.%s.deleted", "2025", m.MemberID)))
+			msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.senior.%s.deleted", c.yearSlug, m.MemberID)))
 			msg.SetBody(&messages.NathejkMemberDeleted{
 				MemberID: m.MemberID,
 				TeamID:   teamID,
@@ -251,7 +251,7 @@ func (c *team) UpdateKlan(teamID types.TeamID, team Klan, members []Senior) erro
 		if m.MemberID == "" {
 			m.MemberID = types.MemberID(uuid.New().String())
 		}
-		msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.senior.%s.updated", "2025", m.MemberID)))
+		msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.senior.%s.updated", c.yearSlug, m.MemberID)))
 		msg.SetBody(&messages.NathejkSeniorUpdated{
 			MemberID:   m.MemberID,
 			TeamID:     teamID,

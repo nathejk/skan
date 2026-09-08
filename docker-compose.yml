@@ -35,6 +35,7 @@ services:
     - jetstream
     environment:
       #GO_BUILD_FLAGS: -race
+      YEAR: 2026
       JETSTREAM_DSN: nats://dev.nathejk.dk:4222
       DB_DSN: root:ib@tcp(mysql:3306)/skan?parseTime=true
       SMS_DSN: cpsms://TOKEN@api.cpsms.dk
@@ -60,6 +61,7 @@ services:
     - jetstream
     environment:
       #GO_BUILD_FLAGS: -race
+      YEAR: 2026
       JETSTREAM_DSN: nats://dev.nathejk.dk:4222
       DB_DSN: root:ib@tcp(mysql:3306)/skan?parseTime=true
       SMS_DSN: cpsms://TOKEN@api.cpsms.dk

@@ -24,9 +24,9 @@ type Commands struct {
 	}
 }
 
-func New(stream streaminterface.Publisher, models data.Models) Commands {
+func New(stream streaminterface.Publisher, models data.Models, yearSlug string) Commands {
 	return Commands{
-		Team: NewTeam(stream, models.Teams),
-		QR:   NewQR(stream),
+		Team: NewTeam(stream, models.Teams, yearSlug),
+		QR:   NewQR(stream, yearSlug),
 	}
 }

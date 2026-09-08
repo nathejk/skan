@@ -237,6 +237,7 @@ original templates have been deleted.
 
 | Variable | Purpose |
 |---|---|
+| `YEAR` | The event year, e.g. `2026`. **Required** — the app refuses to start without it, deliberately, since a wrong year silently finds no data. |
 | `SECRET` | Seeds the QR URL checksum. **Required.** Changing it breaks printed stickers, so never expose it in a URL. |
 | *(token var, not yet added)* | The secret token for `/qr` and `/geo`, passed as a query parameter. Deliberately a different secret from `SECRET`. |
 | *(foto base URL, not yet added)* | Base URL of the `foto` service, e.g. `https://foto.local.nathejk.dk`. Patrol photos live at `<base>/photos/<ref>`. |
@@ -257,6 +258,10 @@ Short, honest list — details and more items in `.rules`.
 - **`/geo` and `/qr` are wide open** — no login and no token — which breaks the
   fair-game rule: `/geo` is a live map of every scan in the race, and `/qr?n=N`
   hands out working sticker URLs for codes that haven't been distributed yet.
+- **The build is currently broken.** The `photo`/`photocover` packages import a
+  module that isn't in `go.mod`, so `go build ./...` and `go test ./...` fail —
+  which also stops the `air` dev loop from rebuilding and breaks the production
+  image build. Task 005 resolves it.
 - **Every patrol shows the same stock photo.** Both the scan page and the
   registration confirmation hardcode `/groupphoto.jpg`, so the "is this the right
   patrol?" confirmation currently confirms nothing. The `photo` and `photocover`

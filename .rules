@@ -98,8 +98,12 @@ today.
 
 Pattern: `NATHEJK.{year}.{entity}.{id}.{event}`
 
-Published by this repo (year slug is currently **hardcoded** in
-`commands.NewQR`):
+The year comes from the **required `YEAR` environment variable** (dev: `2026`),
+threaded through `commands.New`. There is deliberately no default — a wrong year
+fails silently, because year-keyed reads simply find nothing. Hardcoded years are
+not allowed.
+
+Published by this repo:
 
 | Subject | Meaning |
 |---|---|
@@ -354,6 +358,7 @@ Everything runs in containers — never run `go` on the host. One-offs:
 
 | Variable | Dev value | Notes |
 |---|---|---|
+| `YEAR` | `2026` | event year slug. **Required, no default** — an unset value stops the process at boot. Overridable with `-year` |
 | `JETSTREAM_DSN` | `nats://dev.nathejk.dk:4222` | points at **shared dev**, not the local `jetstream` network |
 | `DB_DSN` | `root:ib@tcp(mysql:3306)/skan?parseTime=true` | |
 | `SECRET` | `nh2025` | seeds the QR checksum; required. **Never** put this in a URL |
@@ -398,13 +403,18 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   a missing map key with `""` is a template execution error. It is a free-text
   note about the patrol, carried over from the PHP app's `noticeText`.
 - `doIndexHandler` (`POST /`) publishes a scan with the literal QR id `"x"`.
-- The `scan` and `qr` projections never populate the `year` column, so
-  `scan.Filter{YearSlug: …}` only works via its empty-string bypass.
 - The `prod` Dockerfile stage copies the binary but **not** `webroot/`, while
   `routes.go` serves `/webroot` — static files are missing in production images.
-- The year slug (`2025`) is hardcoded in `commands.NewQR`. Once `photo`/
-  `photocover` are wired (task 005) this stops being cosmetic: their reads are keyed
-  by year, so a wrong year silently means "no photo".
+- The year slug used by the projections' `year` **column** is a separate concern
+  from `YEAR`: a projection must take it from the message subject, so a replay of an
+  older year is not relabelled with the current one. `scan` has the column but never
+  fills it, so `scan.Filter{YearSlug: …}` only works via its empty-string bypass;
+  `qr` has no `year` column at all.
+- **`go build ./...` and `go test ./...` currently fail**: the copied `photo`/
+  `photocover` packages import `github.com/jrgensen/cqrs`, which is not in `go.mod`.
+  This breaks the `air` dev loop (it runs the tests before rebuilding) and the
+  production image (the `build` stage runs `go test`, `staticcheck`, `govulncheck`).
+  Task 005 fixes it by adding the dependency.
 - Consumers `log.Fatalf` on a SQL error, i.e. a bad row kills the process.
 - `go.mod` lists `go-chi/chi/v5` as `// indirect` although it is a direct
   dependency; `go mod tidy` would fix it.

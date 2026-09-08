@@ -24,7 +24,12 @@ type config struct {
 		port    int
 		webroot string
 	}
-	db struct {
+	// year is the event year slug used in every published subject, and the key
+	// every year-scoped projection is read by. It has no default on purpose: a
+	// plausible-but-wrong year fails silently (reads simply find nothing), so an
+	// unset YEAR must stop the process instead.
+	year string
+	db   struct {
 		dsn          string
 		maxOpenConns int
 		maxIdleConns int
@@ -52,6 +57,8 @@ func (a *App) configure() {
 	flag.IntVar(&cfg.server.port, "port", 80, "API server port")
 	flag.StringVar(&cfg.server.webroot, "webroot", getEnv("WEBROOT", "/www"), "Static web root")
 
+	flag.StringVar(&cfg.year, "year", os.Getenv("YEAR"), "Event year slug, e.g. 2026 (required)")
+
 	flag.StringVar(&cfg.jetstream.dsn, "jetstream-dsn", os.Getenv("JETSTREAM_DSN"), "NATS Streaming DSN")
 
 	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("DB_DSN"), "Database DSN")
@@ -59,6 +66,10 @@ func (a *App) configure() {
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "Database max idle connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "Database max connection idle time")
 	flag.Parse()
+
+	if cfg.year == "" {
+		log.Fatal("YEAR is required: set it to the event year slug, e.g. YEAR=2026")
+	}
 
 	a.config = cfg
 }

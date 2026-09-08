@@ -17,12 +17,12 @@ type qr struct {
 	yearSlug     string
 }
 
-func NewQR(p streaminterface.Publisher) *qr {
+func NewQR(p streaminterface.Publisher, yearSlug string) *qr {
 	return &qr{
 		p: p,
 
 		producerSlug: "skan-api",
-		yearSlug:     "2025",
+		yearSlug:     yearSlug,
 	}
 }
 
