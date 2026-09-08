@@ -75,6 +75,15 @@ read them before writing a new one.
   by the `foto` service at `<foto-base-url>/photos/<ref>`, e.g.
   `https://foto.local.nathejk.dk/photos/e3875acc…a567`. The base URL **must come
   from an environment variable** — never hardcode a host.
+- **A patrol cannot start the race without a photograph.** The race begins with the
+  scouts receiving their first map, which does not happen until they have been
+  photographed — so a photograph always exists by the time a QR code is registered.
+  "No photograph" is therefore an error state, not a case to design a fallback for:
+  refuse the registration and send the scanner to HQ (task 006).
+- A **chosen cover is the exception**. Nothing may be publishing
+  `photocoverselected` yet, so the fallback — the team's newest photograph — is the
+  path that actually runs. `photographed` is confirmed present on the stream;
+  `purged` may not be.
 
 ### The library migration
 
@@ -90,9 +99,10 @@ All projections are destined for `github.com/nathejk/shared-go` once they have
 stabilised. That is why `photo` must stay byte-identical to its origin, and why new
 work should not deepen the repo's dependence on `superfluids`/`tablerow`.
 
-**Direction of travel:** new projections use `cqrs`/`stream`; existing ones migrate
-(task 007). Neither library is in `go.mod` yet, so nothing using them compiles
-today.
+**Direction of travel: a complete switch.** The legacy packages are deprecated and
+will be deleted (task 007) — not run alongside the new ones. Both replacement
+modules are public on the module proxy. Neither is in `go.mod` yet, which is why
+`go build ./...` fails today.
 
 ### Event subjects
 
@@ -433,9 +443,9 @@ picking up, creating or updating a task.
 | 002 | Protect `/qr` and `/geo` with a secret token | high | — |
 | 003 | Split the scan-result page by role, real counts | high | 001 |
 | 004 | Confirmation guard against accidental rescans | medium | — |
-| 005 | Wire up the `photo` and `photocover` projections | high | — |
+| 005 | Wire up the `photo` and `photocover` projections | high | 007 |
 | 006 | Show the cover photo + confirm identity before registering | high | 005 |
-| 007 | Migrate `superfluids`/`tablerow` → `jrgensen/stream` + `cqrs` | medium | — |
+| 007 | Complete switch to `jrgensen/stream` + `cqrs`, delete `superfluids` | high | — |
 
 The decided-but-unimplemented behaviours described above are tracked there. When
 you implement one, work the task file as you go rather than retro-filling it, and

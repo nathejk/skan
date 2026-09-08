@@ -8,7 +8,8 @@
 **Completed:**
 
 **Blocks:** 006 (showing the cover photo, and confirming against it)
-**Related:** 007 (migrating the legacy plumbing these packages already assume)
+**Depends on:** 007 — HQ decided on a **complete switch** to `cqrs`/`stream`, so the
+legacy plumbing is retired first and these are wired onto the new mux only.
 
 ## Description
 
@@ -29,25 +30,18 @@ not foreign code to be adapted to the old shape — **they are the target shape*
 and everything else in `nathejk/table/` is what will eventually move to meet them.
 All projections are destined for `shared-go` once stabilised.
 
-Neither library is in `go.mod`/`go.sum` yet, so **nothing here compiles today**.
-That is the first thing to fix.
+Both libraries are **public** on the module proxy, so `go get` needs no auth.
 
-### How to wire them without doing the whole migration first
+### Wiring happens after the switch, not alongside it
 
-The existing projections (`qr`, `scan`, `patrulje`, `klan`, `senior`, `personnel`)
-are still on `streaminterface` + `tablerow` and registered on `xstream.Mux`, which
-cannot accept a `cqrs.Consumer`. Options, in preference order:
+HQ decided on a complete switch (007): `superfluids` and `pkg/tablerow` are
+deprecated and removed, not run in parallel. So there is **one** mux, the `cqrs`
+one, and these two projections register on it like every other. Do not build a
+second mux or an adapter to bridge the old shape — an earlier revision of this task
+suggested running both side by side, and that option is withdrawn.
 
-1. **Run the new plumbing alongside the old** — add `jrgensen/stream` +
-   `jrgensen/cqrs`, stand up their mux for the two photo projections over the same
-   NATS connection, and leave `xstream.Mux` serving the legacy ones until 007
-   retires it. Unblocks 006 without a repo-wide rewrite.
-2. Do 007 first and wire these onto the new mux afterwards. Cleaner end state, but
-   006 waits on a much larger change.
-
-Do **not** port `photo` backwards to `tablerow`/`streaminterface` to make it fit:
-it must stay byte-identical to its origin, and that would deepen the dependency the
-org is removing.
+Do **not** port `photo` backwards to `tablerow`/`streaminterface`: it must stay
+byte-identical to its origin.
 
 ### Image bytes — resolved
 
@@ -77,9 +71,11 @@ the `foto.local.nathejk.dk` dev value and document it in `.rules` and `README.md
   photo", and once 006 gates registration on the photo, that means "nobody can
   register a map". Thread a real year value through rather than adding a second
   `"2025"`.
-- `photo` consumes `photographed`/`purged` events belonging to the `foto` service.
-  Confirm those subjects exist on the JetStream `NATHEJK` stream this service reads,
-  or the tables stay empty and 006 has nothing to show.
+- `photo` consumes `photographed` and `purged`. **`photographed` is confirmed to
+  exist** on the stream; `purged` may not yet, which is harmless — it simply never
+  arrives. Whether `photocover`'s `photocoverselected` is published by anything yet
+  is **unconfirmed**, so assume most or all teams have **no chosen cover** and that
+  the fallback (newest photograph) is the normal path, not the exception.
 - Skan only needs `photocover.Ref` (single team), not the whole-year `Covers`.
 - Reads must reach handlers through a `data.Models` interface; depend on
   `photocover.Queries` and photo's read methods, not the concrete `*Table`.
@@ -88,7 +84,8 @@ the `foto.local.nathejk.dk` dev value and document it in `.rules` and `README.md
 
 - [ ] `github.com/jrgensen/cqrs` and `github.com/jrgensen/stream` added to `go.mod`,
       `go.sum` updated
-- [ ] Decision recorded in the progress log: alongside-the-old vs migrate-first
+- [ ] Both projections registered on the single `cqrs` mux — no second mux, no
+      adapter to the legacy shape
 - [ ] `go build ./...` succeeds with both packages compiled in
 - [ ] Both projections consume from JetStream and their tables are created and
       populated after a replay against a stream carrying photo events
@@ -123,3 +120,9 @@ the `foto.local.nathejk.dk` dev value and document it in `.rules` and `README.md
   porting `photo` backwards is explicitly wrong. (2) Bytes come from the `foto`
   service at `<base>/photos/<ref>` with the base URL in an env var, so skan needs no
   blob store and no serving route. Acceptance criteria rewritten accordingly.
+- 2026-09-08 02:00 — HQ answered the open questions. Both modules are **public**, so
+  no proxy auth is needed. A **complete switch** is wanted (007) rather than running
+  the new mux alongside the old, so this task now depends on 007 and the "alongside"
+  option is withdrawn. `photographed` is confirmed present on the stream; `purged`
+  and `photocoverselected` are not confirmed, so the newest-photograph fallback must
+  be treated as the normal path rather than an edge case.

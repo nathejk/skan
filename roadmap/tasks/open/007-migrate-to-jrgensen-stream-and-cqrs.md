@@ -1,15 +1,19 @@
 # 007 — Migrate superfluids and tablerow to jrgensen/stream and jrgensen/cqrs
 
 **Status:** open
-**Priority:** medium
+**Priority:** high
 **Created:** 2026-09-08
 **Picked up by:**
 **Started:**
 **Completed:**
 
-**Related:** 005 (the photo projections already assume the new libraries)
+**Blocks:** 005, and therefore 006
 
 ## Description
+
+HQ decided on a **complete switch**: the legacy in-repo plumbing is deprecated and
+removed, not run alongside the new libraries. This is now the first task in the
+photo chain rather than background cleanup.
 
 The in-repo streaming and projection plumbing has been superseded:
 
@@ -28,9 +32,16 @@ the new libraries and are the reference for the target shape (see `.rules` →
 `github.com/nathejk/shared-go`, which is the reason to converge on one shape rather
 than maintain two.
 
-This is a mechanical but wide change, so it is worth doing per projection rather
-than in one commit. 005 may stand the new mux up alongside the old one first; this
-task finishes the job and deletes the legacy packages.
+This is a mechanical but wide change. Do it per projection, verifying each against a
+replay before moving on — but the end state is **one** mux and no `superfluids`
+imports anywhere. Both modules are public on the proxy, so `go get` needs no auth.
+
+**It also unbreaks the build.** `go build ./...` and `go test ./...` fail today
+because `photo`/`photocover` import `github.com/jrgensen/cqrs`, which is absent from
+`go.mod`. That stops `air` from rebuilding (it runs the tests first, with
+`stop_on_error = true`) and breaks the production image, whose `build` stage runs
+`go test`, `staticcheck` and `govulncheck`. Adding the dependency early in this task
+fixes the dev loop for everyone.
 
 ### Things to watch
 
@@ -78,3 +89,6 @@ task finishes the job and deletes the legacy packages.
   and `tablerow` (plus more) → `jrgensen/cqrs`, with all projections eventually
   lifted to `shared-go`. Split out of 005 so wiring the photo projections is not
   blocked on a repo-wide rewrite.
+- 2026-09-08 02:00 — HQ chose a **complete switch** over running both muxes, so this
+  is no longer optional groundwork: it blocks 005 and 006, and its priority is raised
+  to high. Modules confirmed public.

@@ -55,6 +55,13 @@ for the patrol's **team number** — the large number on the scouts' arms, not t
 small number printed beside the QR code. Confirming it ties that sticker to that
 patrol permanently.
 
+Because a patrol receives its first map at the start of the race, and **no patrol may
+start without having been photographed**, a photograph always exists at this point.
+The scanner therefore confirms against the patrol's actual photo: *are these the
+scouts in the picture?* A mistyped team number is the mistake this catches, and it is
+worth catching — every later scan of that map is attributed to whichever patrol was
+named here.
+
 ### 3. Every later scan is just a scan
 
 Once a code is known, scanning it shows the patrol (name, arm number, photo) and
@@ -217,11 +224,12 @@ phone over a weak signal in a field at 2am, and the forms work even if JavaScrip
 never runs.
 
 The streaming and projection plumbing is mid-migration: the in-repo `superfluids/`
-and `pkg/tablerow/` packages are being replaced by `github.com/jrgensen/stream` and
-`github.com/jrgensen/cqrs`, and projections are lifted to
-`github.com/nathejk/shared-go` once they stabilise. `nathejk/table/photo` and
-`photocover` are already written in the new shape and are the reference for new
-work; the other six projections still use the old one (task 007).
+and `pkg/tablerow/` packages are being **replaced outright** by
+`github.com/jrgensen/stream` and `github.com/jrgensen/cqrs`, and projections are
+lifted to `github.com/nathejk/shared-go` once they stabilise.
+`nathejk/table/photo` and `photocover` are already written in the new shape and are
+the reference for new work; the other six projections still use the old one, and
+task 007 completes the switch and deletes the legacy packages.
 
 Patrol photographs are not stored here. The projections hold content-hash refs, and
 the bytes come from the `foto` service at `<foto-base-url>/photos/<ref>`.

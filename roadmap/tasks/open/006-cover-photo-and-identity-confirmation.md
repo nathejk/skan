@@ -43,17 +43,33 @@ continue".
 A mistyped team number is the failure this catches: numbers are typed by hand, in
 the dark, from a scout's arm.
 
-### Open question — teams with no photograph
+### Teams with no photograph — decided
 
-If a patrol has neither a cover nor any photograph, there is nothing to confirm
-against. **Decide before implementing** (needs HQ):
+**A patrol cannot start the race without a photograph.** The race begins with the
+scouts receiving their first map, and that does not happen until they have been
+photographed. So by the time any QR code is registered, a photograph exists — the
+first registration *is* the start of that patrol's race.
 
-- refuse the registration and send them to HQ, or
-- allow it with a clear warning that no photo could be checked, or
-- fall back to confirming the team name and member count only.
+That makes "no photograph" not a normal case to design a fallback for, but an
+**error state**: either the patrol has not actually started, or something upstream
+failed. Behaviour:
 
-Do not silently fall back to the stock image — that reproduces exactly the
-meaningless confirmation this task removes.
+- **Refuse the registration** and tell the scanner (in Danish) to contact HQ.
+- Do **not** fall back to the stock image, and do not fall back to confirming the
+  team name only — both would let a mistyped team number through at the one moment
+  the error becomes permanent.
+
+Note the ordering consequence: this makes the photograph a hard dependency of
+registration, so if the photo projection is empty or the year is wrong, **no map can
+be registered at all**. That is the intended strictness, but it means 005 must be
+demonstrably working — correct year, events arriving — before this ships.
+
+### A chosen cover is the exception, not the rule
+
+`photocover` holds an organizer's explicit choice, and nothing may be publishing
+`photocoverselected` yet. Assume most teams have **no** chosen cover, so the
+fallback — the team's newest photograph — is the path that actually runs in
+practice. It must be the well-tested one.
 
 ### Other notes
 
@@ -79,8 +95,11 @@ meaningless confirmation this task removes.
       the group in the photo
 - [ ] Registration cannot be completed without that confirmation, including by
       posting the form directly
-- [ ] The no-photograph case behaves per HQ's decision, recorded in the progress log
+- [ ] A patrol with no photograph cannot have a QR code registered; the scanner gets
+      a Danish message telling them to contact HQ
 - [ ] The stock image is not used as a stand-in for a missing photograph
+- [ ] The newest-photograph fallback is exercised by tests, since a chosen cover is
+      expected to be rare
 - [ ] Thumbnail renditions are used where a full display image is not needed
 - [ ] `go test ./...` and `staticcheck ./...` pass in the container
 
@@ -93,3 +112,10 @@ meaningless confirmation this task removes.
   the one in the cover photo before a new qr/team connection is created. Noted that
   the existing *Bekræft* step already exists but confirms a stock image, i.e. it is
   currently theatre.
+- 2026-09-08 02:00 — No-photograph case decided by HQ: a team is not allowed to start
+  without a photograph, and the race starts by handing out the first map — so a
+  photograph always exists by registration time. Missing means error, not
+  "unphotographed team": refuse the registration and send them to HQ. Recorded the
+  consequence that registration now depends hard on the photo projection being
+  correct. Also noted that `photocoverselected` may not be published by anything yet,
+  so the newest-photograph fallback is the common path.
