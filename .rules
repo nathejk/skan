@@ -62,18 +62,37 @@ CQRS/event-sourcing participant on NATS JetStream.
 ### Photographs (`photo`, `photocover`)
 
 `nathejk/table/photo` and `nathejk/table/photocover` are present but **wired to
-nothing** — see task 005. Two things to know before touching them:
+nothing** — see task 005. They are also the **reference implementation of the
+target shape** for projections in this org (see *The library migration* below), so
+read them before writing a new one.
 
 - `photo` is a **verbatim copy of the `foto` service's package**, bound for
   `shared-go`. Do not edit it; adapt around it. `photocover` is `hq`'s entity and
   must be constructed here with a **nil publisher** — choosing a cover is not a
   scanner's job.
-- Both are built on **`github.com/jrgensen/cqrs`**, which is absent from `go.mod`
-  and is a different abstraction from this repo's `streaminterface` + `tablerow` +
-  `xstream.Mux`. They do not compile here yet, and an adapter is needed.
 - They store **content-hash refs, never bytes**, and `photo` never exposes the
-  original (it carries the camera's metadata, including GPS). Rendering a photo
-  therefore needs a byte source that does not exist in this service yet.
+  original (it carries the camera's metadata, including GPS). The bytes are served
+  by the `foto` service at `<foto-base-url>/photos/<ref>`, e.g.
+  `https://foto.local.nathejk.dk/photos/e3875acc…a567`. The base URL **must come
+  from an environment variable** — never hardcode a host.
+
+### The library migration
+
+This repo's streaming and projection plumbing is **being replaced**, and the two
+photo packages are already written against the new libraries:
+
+| Legacy, in-repo | Replacement |
+|---|---|
+| `superfluids/` (`streaminterface`, `jetstream`, `xstream`) | `github.com/jrgensen/stream` |
+| `pkg/tablerow`, `pkg/sqlpersister`, and more | `github.com/jrgensen/cqrs` |
+
+All projections are destined for `github.com/nathejk/shared-go` once they have
+stabilised. That is why `photo` must stay byte-identical to its origin, and why new
+work should not deepen the repo's dependence on `superfluids`/`tablerow`.
+
+**Direction of travel:** new projections use `cqrs`/`stream`; existing ones migrate
+(task 007). Neither library is in `go.mod` yet, so nothing using them compiles
+today.
 
 ### Event subjects
 
@@ -179,9 +198,9 @@ skan/
     │   ├── commands/        # write side (qr.go is the live one; team.go is inherited)
     │   └── table/           # projections: qr, scan, patrulje, klan, senior, personnel
     │                     #   + photo, photocover — copied in, not yet wired (task 005)
-    ├── pkg/sqlpersister/    # executes raw SQL strings for consumers
-    ├── pkg/tablerow/        # Consumer / SQLTableRow interfaces
-    └── superfluids/         # streaming abstractions: streaminterface, jetstream, xstream
+    ├── pkg/sqlpersister/    # LEGACY → github.com/jrgensen/cqrs
+    ├── pkg/tablerow/        # LEGACY → github.com/jrgensen/cqrs
+    └── superfluids/         # LEGACY → github.com/jrgensen/stream
 ```
 
 Several files are **inherited from sibling Nathejk repos and unused here** —
@@ -302,8 +321,10 @@ endpoints to that unprotected set.
 - **Client-side**: no build step. Bootstrap 3 + jQuery from CDN, plus inline
   `<script>` for geolocation and the `PUT /register` fetch
 - **DB**: MariaDB 10.8, `go-sql-driver/mysql`, hand-written SQL
-- **Events**: NATS JetStream via `superfluids/jetstream`
-- **Shared domain types/messages**: `github.com/nathejk/shared-go`
+- **Events**: NATS JetStream. Currently via the in-repo `superfluids/jetstream`;
+  migrating to `github.com/jrgensen/stream` + `github.com/jrgensen/cqrs` (task 007)
+- **Shared domain types/messages**: `github.com/nathejk/shared-go` — also where
+  projections go once they stabilise
 - **Dev loop**: `air` (`go/go.air.toml`) as a Go tool — rebuilds and reruns tests
   on change
 - **Quality gates in the prod build**: `go test`, `staticcheck`, `govulncheck`
@@ -337,6 +358,7 @@ Everything runs in containers — never run `go` on the host. One-offs:
 | `DB_DSN` | `root:ib@tcp(mysql:3306)/skan?parseTime=true` | |
 | `SECRET` | `nh2025` | seeds the QR checksum; required. **Never** put this in a URL |
 | *token var for `/qr` + `/geo`* | not yet added | separate secret, passed as a GET parameter — see *Protecting `/qr` and `/geo`* |
+| *foto base URL* | not yet added | e.g. `https://foto.local.nathejk.dk`; photos are at `<base>/photos/<ref>`. Required by tasks 005/006 — never hardcode the host |
 | `WEBROOT` | `/www` (flag default) | compose mounts `/webroot`; `routes.go` hardcodes `/webroot` |
 | `SMS_DSN`, `REDIS_ADDR` | set | currently unused by the code |
 
@@ -403,6 +425,7 @@ picking up, creating or updating a task.
 | 004 | Confirmation guard against accidental rescans | medium | — |
 | 005 | Wire up the `photo` and `photocover` projections | high | — |
 | 006 | Show the cover photo + confirm identity before registering | high | 005 |
+| 007 | Migrate `superfluids`/`tablerow` → `jrgensen/stream` + `cqrs` | medium | — |
 
 The decided-but-unimplemented behaviours described above are tracked there. When
 you implement one, work the task file as you go rather than retro-filling it, and
@@ -420,15 +443,27 @@ the `prd` skill if a change needs a spec first.
   being split deliberately.
 - A handler must **never** write to a projection table. State changes go through
   `a.commands.*`, which publishes an event; the projection catches up.
-- Each projection package follows the sibling-repo shape: `table.go` (row struct,
-  `New`, embedded schema), `consumer.go` (`Consumes()` + `HandleMessage`),
-  `query.go`/`querier.go` (reads), `filter.go`, `table.sql`.
-- A new projection must be added to `xstream.Mux` in `main.go` **and** exposed on
+- **New projections use `github.com/jrgensen/cqrs`** (and `jrgensen/stream` for
+  transport), not `pkg/tablerow`/`superfluids`. `nathejk/table/photo` and
+  `photocover` are the reference for the target shape: one `Table` type holding
+  publisher/writer/reader, `Consumes()` + `HandleMessage` folding events
+  idempotently, reads in `query.go` behind a small interface, schema embedded from
+  `table.sql`. Do not add new packages in the legacy shape.
+- The **legacy** shape, still used by `qr`, `scan`, `patrulje`, `klan`, `senior`,
+  `personnel`: `table.go` (row struct, `New`, embedded schema), `consumer.go`
+  (`Consumes()` + `HandleMessage`), `query.go`/`querier.go`, `filter.go`,
+  `table.sql`. Maintain these, but migrate rather than extend the pattern.
+- A new projection must be registered on the mux in `main.go` **and** exposed on
   `data.Models` through an interface in `internal/data/models.go`.
 - Read access is always via a `data.Models` interface, never a bare `*sql.DB` in
   a handler.
-- Consumers build SQL with `fmt.Sprintf("… SET x=%q", …)`; queriers use `?`
-  placeholders. Prefer placeholders in anything new.
+- Legacy consumers build SQL with `fmt.Sprintf("… SET x=%q", …)`; queriers use `?`
+  placeholders. **Always use placeholders in reads.** Writes through a
+  `cqrs.Writer` take a finished statement, so they must quote their own values —
+  see `photocover`'s `quote()` helper, and note `%q` is *not* correct for SQL
+  string literals.
+- Projections are destined for `shared-go`. Keep them free of
+  skan-specific imports so they can be lifted without edits.
 - `staticcheck` and `govulncheck` must pass — they gate the production build.
 
 ### Templates

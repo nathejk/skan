@@ -216,6 +216,16 @@ build step and no SPA — deliberately. A scan has to load instantly on an unkno
 phone over a weak signal in a field at 2am, and the forms work even if JavaScript
 never runs.
 
+The streaming and projection plumbing is mid-migration: the in-repo `superfluids/`
+and `pkg/tablerow/` packages are being replaced by `github.com/jrgensen/stream` and
+`github.com/jrgensen/cqrs`, and projections are lifted to
+`github.com/nathejk/shared-go` once they stabilise. `nathejk/table/photo` and
+`photocover` are already written in the new shape and are the reference for new
+work; the other six projections still use the old one (task 007).
+
+Patrol photographs are not stored here. The projections hold content-hash refs, and
+the bytes come from the `foto` service at `<foto-base-url>/photos/<ref>`.
+
 Some directories are inherited from sibling Nathejk repos and unused here (for
 example `go/nathejk/table/spejder`, `go/nathejk/table/scanner`). See `.rules` for
 the full list. This app was a PHP/Twig application before the port to Go; those
@@ -229,6 +239,7 @@ original templates have been deleted.
 |---|---|
 | `SECRET` | Seeds the QR URL checksum. **Required.** Changing it breaks printed stickers, so never expose it in a URL. |
 | *(token var, not yet added)* | The secret token for `/qr` and `/geo`, passed as a query parameter. Deliberately a different secret from `SECRET`. |
+| *(foto base URL, not yet added)* | Base URL of the `foto` service, e.g. `https://foto.local.nathejk.dk`. Patrol photos live at `<base>/photos/<ref>`. |
 | `JETSTREAM_DSN` | NATS JetStream connection |
 | `DB_DSN` | MariaDB connection |
 | `WEBROOT` | Static file directory |
@@ -274,7 +285,7 @@ than writing to the database directly.
 
 Work is tracked on a file-based board in `roadmap/tasks/` — `open/`, `doing/` and
 `done/` folders holding one Markdown file per task, with the conventions in
-`roadmap/tasks/TASKS.md`. The known gaps listed above are tasks 001–006.
+`roadmap/tasks/TASKS.md`. The known gaps listed above are tasks 001–007.
 
 ## Credits
 
