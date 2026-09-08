@@ -1,0 +1,427 @@
+# Nathejk Skan — Project Rules & Context
+
+> Org-wide conventions live in `.agents/rules/rules.md` (Docker, Traefik,
+> JetStream, git, task board). Read that too. This file describes **this repo**
+> and where it deviates from the org standard.
+
+---
+
+## Overview
+
+**Skan** is the QR scanning service for **Nathejk**, a Danish scouting night race
+where patrols (*patruljer*) navigate from checkpoint to checkpoint while being
+hunted by *banditter*.
+
+Every patrol carries a paper map with a unique QR sticker on it. Patrols receive
+new maps several times during the race, and **every map has its own QR code**.
+Two things happen with those codes:
+
+1. **Registration** — the first time a code is scanned, it is unknown to the
+   system. The scanner is asked for the patrol's team number (the big number on
+   the scouts' arms, *not* the small number next to the QR code), which binds
+   that QR code to that patrol for the rest of its life.
+2. **Scanning** — every later scan of that code records *who* scanned it, *when*,
+   and *where* (browser geolocation, or a hand-typed map coordinate as fallback).
+
+This repo is what a phone lands on when someone scans a sticker: the QR encodes a
+URL into this service. An anonymous visitor is asked to log in with their phone
+number; the number is matched against event personnel and clan seniors, which is
+also how the app knows whether the scanner is a **bandit** or a **crew member** —
+the two are meant to get different views.
+
+Skan only *produces* scan facts. Aggregation, reporting and admin live in other
+Nathejk services (notably `hq`), which consume the same event stream.
+
+---
+
+## Architecture
+
+Skan is a single Go binary that is both a server-rendered web app and a
+CQRS/event-sourcing participant on NATS JetStream.
+
+```
+  QR sticker  ──scan──▶  https://skan…/qr/{qrId}/{checksum}
+                              │
+                         ┌────▼──────────────────────┐  publish   ┌────────────────┐
+                         │   Go binary (go/)         │ ─────────▶ │ NATS JetStream │
+                         │   html/template pages     │            │   "NATHEJK"    │
+                         │   commands/  (write)      │            └───────┬────────┘
+                         │   table/     (read)       │◀── MySQL ◀─────────┘ replay
+                         └───────────────────────────┘        (projections)
+```
+
+- **Write side** — `nathejk/commands/qr.go` publishes three events and never
+  writes SQL directly: `qr.*.found`, `qr.*.registered`, `qr.*.scanned`.
+- **Read side** — `nathejk/table/*` packages implement `streaminterface.Consumer`
+  and materialise events into MariaDB. `xstream.Mux` wires them up; on every
+  start the whole log is replayed, so the read model is disposable.
+- Skan **consumes projections it does not own**: `patrulje`, `klan`, `senior`,
+  `personnel` are populated from events published by other services (mainly
+  `hq`/tilmelding). Skan owns only `qr` and `scan`.
+
+### Event subjects
+
+Pattern: `NATHEJK.{year}.{entity}.{id}.{event}`
+
+Published by this repo (year slug is currently **hardcoded** in
+`commands.NewQR`):
+
+| Subject | Meaning |
+|---|---|
+| `NATHEJK.{year}.qr.{qrId}.found` | An unregistered code was scanned for the first time |
+| `NATHEJK.{year}.qr.{qrId}.registered` | A code was bound to a patrol |
+| `NATHEJK.{year}.qr.{qrId}.scanned` | A registered code was scanned (with location) |
+
+Note `SubjectFromStr` replaces the **first** `:` with `.`, so `NATHEJK:2025.qr…`
+and `NATHEJK.2025.qr…` are the same subject. Both spellings appear in the code;
+prefer the `.` form in new code.
+
+### Request flow
+
+| Route | Purpose |
+|---|---|
+| `GET /` | Manual entry page (type a team number instead of scanning) |
+| `POST /` | Records a scan from the manual page |
+| `GET /qr/{id}/{cs}` | **Scan landing page.** Unknown code → publishes `found`, redirects to `/map/…`. Known code → renders the confirmation/geolocation page |
+| `POST /qr/{id}/{cs}` | Login form target for the scan page |
+| `GET /map/{id}/{cs}` | Registration page — asks for / confirms the team number |
+| `POST /map/{id}/{cs}` | Publishes `registered`, redirects back to `/qr/…` |
+| `PUT /register` | JSON endpoint the scan page calls with geolocation → publishes `scanned` |
+| `POST /login`, `GET /logout` | Phone-number login (see below) |
+| `GET /qr?n=N` | Generates a CSV of `id,url` for the first N codes — the sticker-printing feed. Token-protected, **not** login-protected |
+| `GET /geo` | JSON scan dump with coordinates, for GIS/map export. Token-protected, **not** login-protected |
+| `GET /about`, `GET /healthcheck` | Static page / health probe |
+| `GET /*` | Static files from `/webroot` |
+
+### QR identity and checksum
+
+QR ids are plain incrementing integers. Each URL carries an adler32 checksum of
+`"{qrId}:{SECRET}"` (`main.Checksum`) so codes cannot be enumerated by hand.
+Handlers reject a mismatched checksum with `417 Expectation Failed`. **`SECRET`
+is a required environment variable** — changing it invalidates every printed
+sticker.
+
+### Authentication and roles
+
+There is no external auth service here (unlike `hq`). `internal/login`:
+
+- `POST /login` takes a phone number, looks it up in the `personnel` projection
+  and then the `senior` projection, and stores the resulting user as a
+  **base64-encoded JSON cookie** named `user`.
+- `Authenticate(next, login)` renders the login page instead of the target when
+  the cookie is absent.
+- The cookie is **not signed, not HttpOnly and not Secure** — it is trivially
+  forgeable. Treat this as a known, deliberate-for-now trade-off; do not build
+  anything security-sensitive on top of it without raising it first.
+
+**A scanner has exactly one role, and it is derived from the phone number.** The
+older PHP app assigned people roles they could switch between per session
+(`twig/choose.twig`); that concept is **gone and is not coming back**. Do not
+reintroduce role selection, a role switcher, or a role stored in the session.
+
+The intended rules — **decided, not yet implemented**:
+
+| Phone found in | Role |
+|---|---|
+| `personnel` only | crew |
+| `senior` only | bandit |
+| **both** | **refuse the login** |
+| neither | refuse the login |
+
+**"Senior" and "bandit" are the same thing** — a senior signed up to a klan *is* a
+bandit, so presence in the `senior` projection is the whole bandit test. There is
+no per-person flag to consult and no subset of seniors that does something else.
+(`geoHandler` already relies on this, labelling every senior `"Bandit"`.)
+
+A phone number registered as both crew and senior is a **data error upstream**,
+not a case to disambiguate in the UI. Do not guess, and do not prefer one table
+over the other: block the login and tell the user (in Danish) to contact HQ so
+one of the two registrations can be removed. Note that today's `userByPhone`
+does exactly the wrong thing here — it returns on the first `personnel` hit and
+never notices the conflict.
+
+---
+
+## Project structure
+
+```
+skan/
+├── docker-compose.yml       # dev stack: api, mysql, adminer, redis, gw
+├── docker/Dockerfile        # multistage: base → dev (air) / build → prod
+├── webroot/                 # static assets served at /
+└── go/                      # module nathejk.dk, Go 1.24 — the whole app
+    ├── main.go              # wiring: jetstream, db, projections, mux, commands
+    ├── app.go               # config (flags + env), http.Server
+    ├── routes.go            # chi router + ALL handlers and templates parsing
+    ├── database.go, env.go, server.go
+    ├── templates/           # html/template pages (embedded via //go:embed)
+    ├── internal/
+    │   ├── login/           # phone-number login + cookie auth
+    │   ├── data/            # Models struct: the read-side interfaces
+    │   ├── logging/, jsonlog/, validator/, vcs/
+    ├── nathejk/
+    │   ├── commands/        # write side (qr.go is the live one; team.go is inherited)
+    │   └── table/           # projections: qr, scan, patrulje, klan, senior, personnel
+    ├── pkg/sqlpersister/    # executes raw SQL strings for consumers
+    ├── pkg/tablerow/        # Consumer / SQLTableRow interfaces
+    └── superfluids/         # streaming abstractions: streaminterface, jetstream, xstream
+```
+
+Several files are **inherited from sibling Nathejk repos and unused here** —
+`nathejk/table/spejder`, `signup`, `payment`, `pincode*`, `registrant*`,
+`nathejk/commands/team.go`, `internal/data/{teams,members,users,tokens,permissions}`,
+and `nathejk/table/scanner/` (a verbatim copy of `personnel`, still declaring
+`package personnel`). Do not extend them; if you touch that area, prefer deleting
+the dead copy over editing it.
+
+### Legacy note
+
+This app was a PHP/Twig application before it was ported to Go. A `go/twig/`
+directory held the pre-port originals as an untracked local reference; it has been
+**deleted**. Everything worth keeping from it is captured in *What each role may
+see* below. Do not recreate it.
+
+---
+
+## What each role may see
+
+**Rule of thumb: bandits may only learn about bandits. It has to be a fair game.**
+
+A bandit is a player. Anything a bandit sees about a patrol's progress through the
+race is an unfair advantage, so a bandit's view is restricted to information their
+own side produced: their own catches, and other bandits' catches of that patrol.
+Never show a bandit checkpoint activity, total scan counts, positions from crew
+scans, or anything derived from them.
+
+Crew are not players. A crew member may be checkpoint personnel, a guide helping
+the scouts, or a samarit patching up blisters — all of them legitimately need the
+full picture. **Crew may see everything.**
+
+| | Bandit | Crew |
+|---|---|---|
+| The patrol's identity, name, photo | yes | yes |
+| `catchCount` — times caught by bandits | yes | yes |
+| Total scan count (all scanners) | **no** | yes |
+| Checkpoint / crew scan activity, positions | **no** | yes |
+| Free-text remark about the patrol | yes | yes |
+
+Definitions:
+
+- **`catchCount`** — how many times the patrol has been **caught by bandits**,
+  i.e. the number of scans of that patrol whose scanner is a senior. This is the
+  one count a bandit is allowed to know.
+- **scan count** — total scans by anyone, crew included. Crew-only.
+
+When adding anything to the scan-result page, decide which column of that table it
+belongs in *before* writing the handler. Default to crew-only if unsure.
+
+### Counting catches: the rescan rule
+
+A rescan **counts**. Bandits legitimately catch the same patrol more than once,
+so `catchCount` is a plain count of scans, not of distinct scanners.
+
+But accidental double scans must not inflate it. The guard — **decided, not yet
+implemented**:
+
+> Look at the patrol's **single most recent scan**. If it was made by the *same*
+> scanner *less than 30 minutes* ago, ask for an explicit confirmation
+> ("skal dette tælle som en ny scanning?") before recording. Otherwise record it
+> straight away.
+
+Consequences of that phrasing, all intended:
+
+| Situation | Result |
+|---|---|
+| Same scanner, same patrol, 5 min apart, nothing in between | confirmation required |
+| Same scanner, same patrol, 45 min apart | recorded, no question |
+| Same scanner twice, but another scanner scanned in between | recorded, no question |
+| A different scanner scans right after | recorded, no question |
+
+Rules for implementing it:
+
+- The check is **server-side**, on the patrol's scan history — not on the browser,
+  and not on the QR code (a patrol may carry a new map with a new code).
+- A confirmation must never *drop* the scan silently. Unconfirmed means "not
+  recorded yet, ask the user", and the user must be able to say yes and have it
+  count.
+- The existing flow is `GET /qr/{id}/{cs}` → page → `PUT /register` with the
+  position. So the natural shape is for `PUT /register` to answer "this needs
+  confirming" and for the page to re-`PUT` with an explicit confirm flag. Do not
+  move the decision into the template.
+- This needs a new read on the `scan` projection (latest scan for a team); today's
+  querier only has `GetAll` and a broken `GetByID`.
+
+### Protecting `/qr` and `/geo`
+
+These two are machine endpoints, not scanner pages: `/qr` feeds the sticker
+printing and `/geo` feeds map/GIS export. They are **not** behind the phone login
+— they are protected by a **secret token passed as a GET parameter**, checked
+before anything else runs.
+
+- Use a **separate environment variable** for it, *not* `SECRET`. `SECRET` seeds
+  the QR checksum; a token travels in URLs, browser history, proxy logs and
+  `Referer` headers, and leaking `SECRET` would let anyone mint valid sticker URLs
+  for every code. Keep the two unrelated.
+- Compare with `crypto/subtle.ConstantTimeCompare`, and refuse when the token is
+  empty or the env var is unset — never fail open.
+- Respond `404` to a bad or missing token, so the endpoint's existence isn't
+  advertised.
+- These endpoints stay crew-grade information. Do not hand the token to bandits;
+  `/geo` is a live map of the whole race and would break the fair-game rule
+  outright.
+
+**Neither is protected today** — both are wired without `user.Authenticate` and
+without a token check in `routes.go`, so they are fully public. Do not add new
+endpoints to that unprotected set.
+
+---
+
+## Technology stack
+
+- **Go 1.24**, module `nathejk.dk`, single binary, no separate `cmd/` dir
+- **Router**: `go-chi/chi/v5`
+- **Views**: `html/template`, parsed per request from an `embed.FS`, each page
+  composed as `base.html` + one page template
+- **Client-side**: no build step. Bootstrap 3 + jQuery from CDN, plus inline
+  `<script>` for geolocation and the `PUT /register` fetch
+- **DB**: MariaDB 10.8, `go-sql-driver/mysql`, hand-written SQL
+- **Events**: NATS JetStream via `superfluids/jetstream`
+- **Shared domain types/messages**: `github.com/nathejk/shared-go`
+- **Dev loop**: `air` (`go/go.air.toml`) as a Go tool — rebuilds and reruns tests
+  on change
+- **Quality gates in the prod build**: `go test`, `staticcheck`, `govulncheck`
+  all run in the `build` stage, so a lint or vuln failure fails the image
+
+`redis` / `REDIS_ADDR` are provisioned in compose but not used by the Go code.
+
+---
+
+## Development
+
+```sh
+docker compose up          # api + mysql + adminer + gw
+```
+
+Requires the external `traefik` and `jetstream` networks from the org infra repo.
+Everything runs in containers — never run `go` on the host. One-offs:
+`docker compose run --rm api go test ./...`.
+
+| Service | URL |
+|---|---|
+| App | `https://skan.local.nathejk.dk` |
+| Adminer | `http://mysql.skan.local.nathejk.dk` |
+| Redis Commander | `http://redis.skan.local.nathejk.dk` |
+
+### Environment
+
+| Variable | Dev value | Notes |
+|---|---|---|
+| `JETSTREAM_DSN` | `nats://dev.nathejk.dk:4222` | points at **shared dev**, not the local `jetstream` network |
+| `DB_DSN` | `root:ib@tcp(mysql:3306)/skan?parseTime=true` | |
+| `SECRET` | `nh2025` | seeds the QR checksum; required. **Never** put this in a URL |
+| *token var for `/qr` + `/geo`* | not yet added | separate secret, passed as a GET parameter — see *Protecting `/qr` and `/geo`* |
+| `WEBROOT` | `/www` (flag default) | compose mounts `/webroot`; `routes.go` hardcodes `/webroot` |
+| `SMS_DSN`, `REDIS_ADDR` | set | currently unused by the code |
+
+Tables are created on boot with `CREATE TABLE IF NOT EXISTS`, so **adding a
+column to a `table.sql` does nothing where the table already exists** — drop the
+table (or the DB) in dev.
+
+---
+
+## Known deviations & rough edges
+
+Flag or fix these deliberately; don't quietly copy the pattern.
+
+- **Compose uses a `gw` gateway container** (`jrgensen/gateway`) with
+  `PROXY_MAPPINGS` and a single Traefik router, instead of the org's per-service
+  Traefik labels. `api` also publishes a port. Migrating to the standard pattern
+  is a pending piece of work.
+- **`JETSTREAM_DSN` points at `dev.nathejk.dk`**, so local runs read and write the
+  shared dev stream.
+- **Bandit vs crew views are not implemented.** `scanHandler` hardcodes
+  `isBandit: true`, `scanCount: 10`, `catchCount: 1`. The role should come from
+  the phone-number lookup, and the two views must differ per *What each role may
+  see* — today a crew member gets the restricted bandit page, and the counts are
+  fiction either way.
+- **`/geo` and `/qr` are completely public** — no login, no token — which breaks
+  the fair-game rule outright. See *Protecting `/qr` and `/geo`*.
+- **Rescans are unguarded.** Any repeat scan counts immediately; the 30-minute
+  same-scanner confirmation is not implemented. Note also that the `scan` table's
+  primary key is `(qrId, uts)` with `INSERT IGNORE`, so two scans of one code in
+  the *same second* are silently discarded — that is accidental, not the rule.
+- **An unrecognised phone number produces a 500, not a message.** `LoginHandler`
+  marshals a `nil` user into the cookie as `null`; the next request then fails
+  `UserFromRequest` with a non-`ErrNoCookie` error, and `Authenticate` turns that
+  into `500 server error`. Failed and refused logins both need to re-render the
+  login page with a Danish explanation instead.
+- `coordinates.html` references `.remark`, which no handler supplies — comparing
+  a missing map key with `""` is a template execution error. It is a free-text
+  note about the patrol, carried over from the PHP app's `noticeText`.
+- `doIndexHandler` (`POST /`) publishes a scan with the literal QR id `"x"`.
+- The `scan` and `qr` projections never populate the `year` column, so
+  `scan.Filter{YearSlug: …}` only works via its empty-string bypass.
+- The `prod` Dockerfile stage copies the binary but **not** `webroot/`, while
+  `routes.go` serves `/webroot` — static files are missing in production images.
+- The year slug (`2025`) is hardcoded in `commands.NewQR`.
+- Consumers `log.Fatalf` on a SQL error, i.e. a bad row kills the process.
+- `go.mod` lists `go-chi/chi/v5` as `// indirect` although it is a direct
+  dependency; `go mod tidy` would fix it.
+
+---
+
+## Task board
+
+Tasks live in `roadmap/tasks/{open,doing,done}/` per the org-wide file-based
+kanban system; `roadmap/tasks/TASKS.md` holds the conventions. Read it before
+picking up, creating or updating a task.
+
+The four decided-but-unimplemented items described above are tracked as tasks
+001–004. When you implement one, work the task file as you go rather than
+retro-filling it, and update the *Known deviations* list here once the deviation
+is actually gone.
+
+PRD folders (`roadmap/prd/{draft,doing,done}/`) do not exist yet — create them via
+the `prd` skill if a change needs a spec first.
+
+---
+
+## Coding conventions
+
+### Go
+- Handlers live in `routes.go` on `*App`; keep new ones there unless the file is
+  being split deliberately.
+- A handler must **never** write to a projection table. State changes go through
+  `a.commands.*`, which publishes an event; the projection catches up.
+- Each projection package follows the sibling-repo shape: `table.go` (row struct,
+  `New`, embedded schema), `consumer.go` (`Consumes()` + `HandleMessage`),
+  `query.go`/`querier.go` (reads), `filter.go`, `table.sql`.
+- A new projection must be added to `xstream.Mux` in `main.go` **and** exposed on
+  `data.Models` through an interface in `internal/data/models.go`.
+- Read access is always via a `data.Models` interface, never a bare `*sql.DB` in
+  a handler.
+- Consumers build SQL with `fmt.Sprintf("… SET x=%q", …)`; queriers use `?`
+  placeholders. Prefer placeholders in anything new.
+- `staticcheck` and `govulncheck` must pass — they gate the production build.
+
+### Templates
+- Server-rendered `html/template` is the deliberate choice for this app: a scan
+  must render fast on a bad field connection, on an unknown phone, with no JS
+  bundle. **Do not introduce an SPA or a frontend build step here without an
+  explicit decision** — that is a change of direction, not a refactor.
+- Pages are `{{define "title"}}` + `{{define "content"}}` composed into
+  `base.html`. Add a template to `go/templates/` and it is embedded
+  automatically.
+- Progressive enhancement: the form works without JS; geolocation and the
+  `PUT /register` call are layered on top, with a typed-coordinate prompt as
+  fallback.
+
+### Language
+- Domain terms stay Danish: *patrulje* (patrol), *spejder* (scout), *klan*
+  (clan), *senior*, *gøgler*/*badut* (performer/crew), *bandit*, *post*
+  (checkpoint), *lok* (camp location), *holdnummer* (team number).
+- ***senior* and *bandit* are synonyms.** `senior` is the signup/data word (the
+  projection, the `senior` table, `NATHEJK.*.senior.*` events); `bandit` is the
+  race word used in user-facing text. Same people.
+- All user-facing text is Danish. Code identifiers and comments are English,
+  except domain entity names.
