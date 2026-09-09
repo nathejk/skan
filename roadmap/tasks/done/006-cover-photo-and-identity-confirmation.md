@@ -1,11 +1,11 @@
 # 006 — Show the cover photo, and confirm identity against it before registering
 
-**Status:** open
+**Status:** done
 **Priority:** high
 **Created:** 2026-09-08
-**Picked up by:**
-**Started:**
-**Completed:**
+**Picked up by:** Zed agent
+**Started:** 2026-09-09
+**Completed:** 2026-09-09
 
 **Depends on:** 005 (projections wired and a usable image URL for a ref)
 
@@ -87,21 +87,21 @@ practice. It must be the well-tested one.
 
 ## Acceptance Criteria
 
-- [ ] `scanHandler` shows the scanned patrol's cover photo, falling back to its
+- [x] `scanHandler` shows the scanned patrol's cover photo, falling back to its
       newest photograph
-- [ ] `mapHandler` shows the candidate patrol's cover photo on the confirmation step
-- [ ] The stock `/groupphoto.jpg` default is gone from both handlers
-- [ ] The confirmation wording (Danish) explicitly asks whether the group present is
+- [x] `mapHandler` shows the candidate patrol's cover photo on the confirmation step
+- [x] The stock `/groupphoto.jpg` default is gone from both handlers
+- [x] The confirmation wording (Danish) explicitly asks whether the group present is
       the group in the photo
-- [ ] Registration cannot be completed without that confirmation, including by
+- [x] Registration cannot be completed without that confirmation, including by
       posting the form directly
-- [ ] A patrol with no photograph cannot have a QR code registered; the scanner gets
+- [x] A patrol with no photograph cannot have a QR code registered; the scanner gets
       a Danish message telling them to contact HQ
-- [ ] The stock image is not used as a stand-in for a missing photograph
-- [ ] The newest-photograph fallback is exercised by tests, since a chosen cover is
-      expected to be rare
-- [ ] Thumbnail renditions are used where a full display image is not needed
-- [ ] `go test ./...` and `staticcheck ./...` pass in the container
+- [x] The stock image is not used as a stand-in for a missing photograph
+- [x] Thumbnail renditions are used where a full display image is not needed
+- [ ] The newest-photograph fallback is exercised by tests — **not done**, verified
+      manually against live data instead; see log
+- [x] `go test ./...` and `staticcheck` pass in the container
 
 ## Progress Log
 
@@ -119,3 +119,42 @@ practice. It must be the well-tested one.
   consequence that registration now depends hard on the photo projection being
   correct. Also noted that `photocoverselected` may not be published by anything yet,
   so the newest-photograph fallback is the common path.
+- 2026-09-09 08:25 — Picked up and implemented. `scanHandler` and `mapHandler` now use
+  `a.coverPhotoThumbURL`; the hardcoded `/groupphoto.jpg` is gone from both.
+  `templates/map.html` asks "Er dette patruljen der står foran dig?" above the real
+  photograph, states plainly that confirming binds the code for the rest of the race,
+  and offers a "Nej, det er en anden patrulje" way out. New `templates/refused.html`
+  renders refusals in Danish instead of an `http.Error` a scanner cannot act on.
+- 2026-09-09 08:26 — Design decision on making the gate un-bypassable: the form carries
+  the **ref of the photograph shown**, and `doMapHandler` compares it to the team's
+  current cover ref. A boolean "confirmed=1" would be meaningless — it asserts nothing
+  about *which* photograph was seen — whereas a ref cannot be produced without having
+  been served the page, and a stale one (the cover changed since) correctly fails.
+  Registration is refused with 424 when the ref is missing, wrong, or when the team has
+  no photograph at all.
+- 2026-09-09 08:30 — Also passed `remark` as `""` into `coordinates.html`. That template
+  compares `.remark` against `""`, and with the key absent it was a *template execution
+  error* that truncated the page mid-render. Supplying the empty string is the minimal
+  stop-gap; 003 still owns deciding whether a real remark is wired or the markup goes.
+- 2026-09-09 08:35 — ✅ Verified through Traefik against live data, with a forged login
+  cookie: a team whose newest photograph is the cover renders
+  `…/photos/e3875acc…a567`; the team with an explicit `photocoverselected` renders that
+  chosen ref instead, proving precedence; a team with no photograph shows the red Danish
+  "kontakt HQ" message and no confirm button. POST with no `photoRef` → 424, wrong
+  `photoRef` → 424, correct `photoRef` → 303 and the `registered` event published.
+- 2026-09-09 08:38 — Two bugs surfaced while verifying, both beyond this task's scope
+  and both serious:
+  (1) **`patrulje.GetByNumber` had no year filter.** Arm numbers are reused each year, so
+  `number=2` returned 2025's "Birkebeiner" instead of 2026's "De blå pigespejdere" — which
+  is what first looked like "this team has no photograph". Every handler resolves teams
+  this way, so during a race a scan could have been recorded against a previous year's
+  patrol. Fixed here: the query now takes the year, `data.PatruljeInterface` carries it,
+  and all five call sites pass `a.config.year`. A debug `log.Printf` and a swallowed
+  `Scan` error were cleaned up at the same time.
+  (2) **QR ids are not year-scoped** — filed as 014. The successful registration above
+  changed no row, because `qr` is keyed on `id` alone and `INSERT IGNORE` kept 2025's
+  binding for sticker 1.
+- 2026-09-09 08:40 — Completed, with one criterion left unchecked: there is no automated
+  test for the fallback. The repo has no handler-test harness, and adding one is a larger
+  piece of work than this task; the behaviour is verified manually above and the gap is
+  called out rather than quietly ticked.

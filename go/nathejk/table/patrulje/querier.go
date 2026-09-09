@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/nathejk/shared-go/types"
@@ -90,14 +89,25 @@ func (q *querier) GetByID(ctx context.Context, teamID types.TeamID) (*Patrulje, 
 	return &p, nil
 }
 
-func (q *querier) GetByNumber(ctx context.Context, teamNumber int) (*Patrulje, error) {
-	if teamNumber == 0 {
+// GetByNumber resolves an arm number to a patrulje within one event year.
+//
+// The year is **not** optional. Team numbers are reused every year, so without it
+// this query is ambiguous: MariaDB returns whichever matching row it likes, and a
+// scan can be attributed to a patrol from a previous race. That was a live bug —
+// number 2 resolved to 2025's "Birkebeiner" instead of 2026's "De blå
+// pigespejdere", which then appeared to have no photograph.
+func (q *querier) GetByNumber(ctx context.Context, yearSlug string, teamNumber int) (*Patrulje, error) {
+	if teamNumber == 0 || yearSlug == "" {
 		return nil, tables.ErrRecordNotFound
 	}
-	query := `SELECT teamId FROM patrulje WHERE teamNumber = ?`
+	query := `SELECT teamId FROM patrulje WHERE teamNumber = ? AND year = ?`
 	var teamID types.TeamID
-	q.db.QueryRow(query, teamNumber).Scan(&teamID)
-	log.Printf("GetByNumber: %d %q", teamNumber, teamID)
+	if err := q.db.QueryRowContext(ctx, query, teamNumber, yearSlug).Scan(&teamID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, tables.ErrRecordNotFound
+		}
+		return nil, err
+	}
 	return q.GetByID(ctx, teamID)
 }
 

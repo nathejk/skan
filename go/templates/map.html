@@ -4,16 +4,27 @@
     <div class="starter-template">
         <h1>Tilknyt patrulje</h1>
         {{ if .confirm }}
-        <p class="lead">Du er ved at tilknytte denne QR-kode til <strong>{{ .armNumber }}. {{ .team.Name }}</strong></p>
+        <p class="lead">Er dette patruljen der står foran dig?</p>
         <div class="row">
         <div class="col-md-3"></div>
         <img src="{{ .photo }}" alt="Billede af patruljen" class="img-rounded col-md-6">
         </div>
+        <p class="lead"><strong>{{ .armNumber }}. {{ .team.Name }}</strong></p>
+        <p>Tjek billedet grundigt. Når du bekræfter, bliver QR-koden på kortet bundet til
+        denne patrulje for resten af løbet.</p>
         <div class="row">
         <form action="" method="post">
-            <button type="submit" class="btn btn-primary" name="confirmed" value="{{ .team.TeamNumber }}">Bekræft</button>
+            <input type="hidden" name="photoRef" value="{{ .photoRef }}" />
+            <button type="submit" class="btn btn-primary btn-lg" name="confirmed" value="{{ .team.TeamNumber }}">Ja, det er dem &ndash; tilknyt kortet</button>
         </form>
         </div>
+        <p><a href="?">Nej, det er en anden patrulje</a></p>
+
+        {{ else if .noPhoto }}
+        <p class="lead" style="color:red">Vi har ikke noget billede af patrulje
+        {{ .armNumber }}. {{ .team.Name }}, så vi kan ikke bekræfte at det er dem.</p>
+        <p>En patrulje kan ikke starte uden billede, så det er en fejl. Kontakt HQ.</p>
+        <p><a href="?">Prøv et andet patruljenummer</a></p>
 
         {{ else }}
         <p class="lead">Denne QR-kode har ikke været scannet før, indtast patruljenummer på den patrulje der skal tilknyttes denne QR-kode:</p>

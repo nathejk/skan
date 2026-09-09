@@ -87,7 +87,7 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) doIndexHandler(w http.ResponseWriter, r *http.Request) {
 	teamNumber, _ := strconv.Atoi(r.FormValue("number"))
-	team, _ := a.models.Patrulje.GetByNumber(r.Context(), teamNumber)
+	team, _ := a.models.Patrulje.GetByNumber(r.Context(), a.config.year, teamNumber)
 
 	user, err := login.UserFromRequest(r)
 	if user == nil {
@@ -125,17 +125,25 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	number, _ := strconv.Atoi(r.URL.Query().Get("number"))
-	team, _ := a.models.Patrulje.GetByNumber(r.Context(), number)
+	team, _ := a.models.Patrulje.GetByNumber(r.Context(), a.config.year, number)
 	data := map[string]any{
 		"qrid":     chi.URLParam(r, "id"),
 		"checksum": chi.URLParam(r, "cs"),
 		"confirm":  false,
 		"team":     team,
-		"photo":    "/groupphoto.jpg",
+		"photo":    "",
+		"photoRef": "",
+		"noPhoto":  false,
 	}
 	if team != nil {
-		data["confirm"] = true
+		// The confirmation is only meaningful against the patrol's real photograph, so
+		// the ref the scanner is shown is carried in the form and checked on POST.
+		ref := a.coverPhotoRef(r.Context(), team.TeamID)
 		data["armNumber"] = fmt.Sprintf("%s-%d", team.TeamNumber, team.MemberCount)
+		data["photoRef"] = ref
+		data["photo"] = a.coverPhotoThumbURL(r.Context(), team.TeamID)
+		data["confirm"] = ref != ""
+		data["noPhoto"] = ref == ""
 	}
 
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
@@ -155,13 +163,52 @@ func (a *App) doMapHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	teamNumber, _ := strconv.Atoi(r.FormValue("confirmed"))
-	team, _ := a.models.Patrulje.GetByNumber(r.Context(), teamNumber)
+	team, _ := a.models.Patrulje.GetByNumber(r.Context(), a.config.year, teamNumber)
 	if team == nil {
 		http.Error(w, "Patrulje not found", http.StatusNotFound)
 		return
 	}
-	a.commands.QR.Register(qrID, *team, *user)
+
+	// Binding a code to a patrulje is the moment a mistake becomes permanent: every
+	// later scan of that map is attributed to whoever is named here, for the rest of
+	// the race. So the scanner must have confirmed the patrol against its photograph,
+	// and that is checked here rather than trusted from the page.
+	//
+	// The check is on the ref, not a boolean: a confirmation is only worth anything
+	// if it refers to the photograph actually shown. A stale or forged value fails.
+	ref := a.coverPhotoRef(r.Context(), team.TeamID)
+	if ref == "" {
+		// A patrulje cannot start the race without being photographed, so this is an
+		// error state rather than an unphotographed team. Refuse and send them to HQ.
+		a.registrationRefused(w, r, "Denne patrulje har ikke noget billede, så identiteten kan ikke bekræftes. Kontakt HQ.")
+		return
+	}
+	if r.FormValue("photoRef") != ref {
+		a.registrationRefused(w, r, "Bekræftelsen passer ikke til patruljens billede. Prøv igen, og kontakt HQ hvis det bliver ved.")
+		return
+	}
+
+	if err := a.commands.QR.Register(qrID, *team, *user); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, fmt.Sprintf("/qr/%s/%d", qrID, cs), http.StatusSeeOther)
+}
+
+// registrationRefused renders a Danish explanation instead of binding the code.
+//
+// Deliberately not http.Error: this is read by a scanner on a phone in a field, not
+// by a developer, and "424 Failed Dependency" tells them nothing about what to do.
+func (a *App) registrationRefused(w http.ResponseWriter, r *http.Request, message string) {
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/refused.html")
+	if err != nil {
+		http.Error(w, message, http.StatusFailedDependency)
+		return
+	}
+	w.WriteHeader(http.StatusFailedDependency)
+	if err := ts.ExecuteTemplate(w, "base", map[string]any{"message": message}); err != nil {
+		log.Print(err.Error())
+	}
 }
 
 func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +245,7 @@ func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	patrulje, err := a.models.Patrulje.GetByNumber(r.Context(), qr.TeamNumber)
+	patrulje, err := a.models.Patrulje.GetByNumber(r.Context(), a.config.year, qr.TeamNumber)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("No patrulje found %#v", err), http.StatusFailedDependency)
 		return
@@ -215,7 +262,8 @@ func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 		"team":       patrulje,
 		"scanCount":  10,
 		"catchCount": 1,
-		"photo":      "/groupphoto.jpg",
+		"photo":      a.coverPhotoThumbURL(r.Context(), patrulje.TeamID),
+		"remark":     "",
 		"isBandit":   true,
 	}
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
@@ -260,7 +308,7 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	patrulje, err := a.models.Patrulje.GetByNumber(r.Context(), in.TeamNumber)
+	patrulje, err := a.models.Patrulje.GetByNumber(r.Context(), a.config.year, in.TeamNumber)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("No patrulje found %#v", err), http.StatusFailedDependency)
 		return
