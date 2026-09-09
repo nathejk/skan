@@ -93,3 +93,8 @@ worse than refusing.
   on the event and in `qr` — nothing yet *shows* a patrol's current sheet back to a scanner,
   and nothing consumes `handoutCheckgroupId`, which is how a sheet's checkpoints are meant
   to become visible. Both belong to whoever builds the scouts' view.
+- 2026-09-09 17:35 — HQ: the picker needs only the title and the id, not the rest of a
+  sheet's detail. Dropped `format` from `data.KortSheet`, the query and the option labels,
+  so the read is now exactly `SELECT id, name`. Verified the picker still lists all five
+  spejder sheets in handout order, now as plain titles — `Skitse CP2` and `Målskitse` read
+  fine without the format suffix, since the names already say what they are.

@@ -19,7 +19,7 @@
                 <select class="form-control input-lg" id="mapId" name="mapId" required>
                     <option value="">Vælg kort &hellip;</option>
                     {{ range .maps }}
-                    <option value="{{ .ID }}">{{ .Name }}{{ if .Format }} ({{ .Format }}){{ end }}</option>
+                    <option value="{{ .ID }}">{{ .Name }}</option>
                     {{ end }}
                 </select>
             </div>

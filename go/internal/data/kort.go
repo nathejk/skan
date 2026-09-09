@@ -9,15 +9,14 @@ import (
 	"github.com/nathejk/shared-go/types"
 )
 
-// KortSheet is a map sheet as a scanner needs to see it: enough to pick one from a list.
+// KortSheet is a map sheet as a scanner needs it: just enough to pick one from a list.
 //
-// Deliberately much less than kort.Kort. A scanner is choosing which sheet they are
-// handing over, so they need its name and format and nothing else — not its extents, and
-// not its checkpoint list, which is the scouts' information rather than theirs.
+// Deliberately only id and title. A scanner is choosing which sheet they are handing
+// over, so the name is all they need to recognise it — not its format, extents, or
+// checkpoint list, the last of which is the scouts' information rather than theirs.
 type KortSheet struct {
-	ID     string
-	Name   string
-	Format string
+	ID   string
+	Name string
 }
 
 // KortReader reads the map sheets a patrulje may be handed.
@@ -67,7 +66,7 @@ func (r KortReader) SpejderSheets(ctx context.Context, year string) ([]KortSheet
 
 	// sortOrder is handout order along the route, which is the order a scanner expects to
 	// see them in.
-	query := `SELECT id, name, format FROM kort
+	query := `SELECT id, name FROM kort
 		WHERE year = ? AND ` + spejderSetFilter + `
 		ORDER BY sortOrder ASC, id ASC`
 
@@ -80,7 +79,7 @@ func (r KortReader) SpejderSheets(ctx context.Context, year string) ([]KortSheet
 	sheets := []KortSheet{}
 	for rows.Next() {
 		var s KortSheet
-		if err := rows.Scan(&s.ID, &s.Name, &s.Format); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name); err != nil {
 			return nil, fmt.Errorf("scanning map sheet: %w", err)
 		}
 		sheets = append(sheets, s)
