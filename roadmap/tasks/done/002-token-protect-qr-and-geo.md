@@ -1,11 +1,11 @@
 # 002 — Protect /qr and /geo with a secret token
 
-**Status:** open
+**Status:** done
 **Priority:** high
 **Created:** 2026-09-08
-**Picked up by:**
-**Started:**
-**Completed:**
+**Picked up by:** Zed agent
+**Started:** 2026-09-09
+**Completed:** 2026-09-09
 
 ## Description
 
@@ -44,17 +44,17 @@ bandits.
 
 ## Acceptance Criteria
 
-- [ ] `EXPORT_TOKEN` is read at startup and
+- [x] `EXPORT_TOKEN` is read at startup and
       threaded to the handlers — not read ad hoc via `os.Getenv` inside them
-- [ ] `/qr` and `/geo` return `404` when the token is missing, empty or wrong
-- [ ] Both endpoints work with a correct token
-- [ ] Comparison uses `crypto/subtle.ConstantTimeCompare`
-- [ ] An unset/empty env var refuses all requests rather than allowing them
-- [ ] The token check runs before any query or response body is written
-- [ ] `SECRET` is not reused for this purpose
-- [ ] Dev value added to `docker-compose.yml`; env tables in `.rules` and
+- [x] `/qr` and `/geo` return `404` when the token is missing, empty or wrong
+- [x] Both endpoints work with a correct token
+- [x] Comparison uses `crypto/subtle.ConstantTimeCompare`
+- [x] An unset/empty env var refuses all requests rather than allowing them
+- [x] The token check runs before any query or response body is written
+- [x] `SECRET` is not reused for this purpose
+- [x] Dev value added to `docker-compose.yml`; env tables in `.rules` and
       `README.md` updated
-- [ ] `go test ./...` and `staticcheck ./...` pass in the container
+- [x] `go test ./...` and `staticcheck ./...` pass in the container
 
 ## Progress Log
 
@@ -64,3 +64,14 @@ bandits.
   are wired without `user.Authenticate`. HQ decided on a GET-parameter token rather
   than a login, since these feed printing and GIS tooling.
 - 2026-09-08 04:30 — HQ confirmed the variable name: `EXPORT_TOKEN`.
+- 2026-09-09 08:50 — Implemented as a `requireExportToken` middleware on `*App` rather
+  than a check inside each handler, so the token is read once into config and the two
+  routes are visibly guarded at the routing table. Made `EXPORT_TOKEN` required at boot:
+  an optional guard that silently does nothing when unset is worse than no guard, because
+  it looks protected.
+- 2026-09-09 08:52 — ✅ Verified through Traefik: `/qr?n=2` and `/geo` both return **404**
+  with no token and with a wrong token, and both return their data with the correct one.
+  404 rather than 403 so the endpoints do not advertise themselves.
+- 2026-09-09 08:52 — Completed. Note the sticker URLs `/qr` emits are scan URLs
+  (`/qr/{id}/{cs}`) and deliberately carry no token — they are meant to be printed and
+  scanned by anyone holding the map.

@@ -35,6 +35,11 @@ type config struct {
 	// patrulje cannot start the race without a photograph, so a wrong base URL
 	// means every registration refuses.
 	fotoBaseURL string
+	// exportToken guards /qr and /geo. Deliberately a different secret from SECRET:
+	// this one travels in query strings, and so into browser history, proxy logs and
+	// Referer headers, whereas leaking SECRET would let anyone mint valid sticker
+	// URLs for every code ever printed.
+	exportToken string
 	db          struct {
 		dsn          string
 		maxOpenConns int
@@ -64,6 +69,7 @@ func (a *App) configure() {
 
 	flag.StringVar(&cfg.year, "year", os.Getenv("YEAR"), "Event year slug, e.g. 2026 (required)")
 	flag.StringVar(&cfg.fotoBaseURL, "foto-base-url", os.Getenv("FOTO_BASE_URL"), "Base URL of the foto service, e.g. https://foto.local.nathejk.dk (required)")
+	flag.StringVar(&cfg.exportToken, "export-token", os.Getenv("EXPORT_TOKEN"), "Secret token guarding /qr and /geo (required)")
 
 	flag.StringVar(&cfg.jetstream.dsn, "jetstream-dsn", os.Getenv("JETSTREAM_DSN"), "NATS Streaming DSN")
 
@@ -80,6 +86,9 @@ func (a *App) configure() {
 		log.Fatal("FOTO_BASE_URL is required: set it to the foto service base URL, e.g. FOTO_BASE_URL=https://foto.local.nathejk.dk")
 	}
 	cfg.fotoBaseURL = strings.TrimSuffix(cfg.fotoBaseURL, "/")
+	if cfg.exportToken == "" {
+		log.Fatal("EXPORT_TOKEN is required: it guards the /qr sticker feed and the /geo scan export")
+	}
 
 	a.config = cfg
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -326,6 +327,37 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(`{"status":"ok"}`))
 }
+
+// requireExportToken guards the machine endpoints, /qr and /geo.
+//
+// These are not scanner pages: /qr feeds sticker printing and /geo feeds map/GIS
+// export, so they sit behind a shared token in the query string rather than the
+// phone login. Both are crew-grade information — /geo is a live map of the whole
+// race, which in a bandit's hands would end the fair game outright — so the token
+// must not be handed out to players.
+//
+// Three deliberate choices:
+//
+//   - The token is EXPORT_TOKEN, never SECRET. A token in a URL leaks into browser
+//     history, proxy logs and Referer headers; leaking SECRET would let anyone
+//     compute a valid checksum for every sticker id, printed or not, recoverable
+//     only by reprinting the entire run.
+//   - Comparison is constant-time, and an unset or empty configured token refuses
+//     everything rather than failing open.
+//   - The answer is 404, not 403, so the endpoints do not advertise their existence
+//     to anyone poking at the host.
+func (a *App) requireExportToken(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		supplied := r.URL.Query().Get("token")
+		if a.config.exportToken == "" || supplied == "" ||
+			subtle.ConstantTimeCompare([]byte(supplied), []byte(a.config.exportToken)) != 1 {
+			http.NotFound(w, r)
+			return
+		}
+		next(w, r)
+	}
+}
+
 func (a *App) routes() http.Handler {
 	user := login.New(a.models)
 
@@ -340,8 +372,8 @@ func (a *App) routes() http.Handler {
 	//r.Get("/login", a.loginHandler)
 	r.Get("/logout", user.LogoutHandler)
 	r.Post("/login", user.LoginHandler)
-	r.Get("/qr", a.qrHandler)
-	r.Get("/geo", a.geoHandler)
+	r.Get("/qr", a.requireExportToken(a.qrHandler))
+	r.Get("/geo", a.requireExportToken(a.geoHandler))
 	r.Get("/qr/{id}/{cs}", user.Authenticate(a.scanHandler, a.loginHandler))
 	r.Post("/qr/{id}/{cs}", user.LoginHandler)
 	r.Get("/map/{id}/{cs}", user.Authenticate(a.mapHandler, a.loginHandler))

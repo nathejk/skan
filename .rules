@@ -321,9 +321,9 @@ before anything else runs.
   `/geo` is a live map of the whole race and would break the fair-game rule
   outright.
 
-**Neither is protected today** — both are wired without `user.Authenticate` and
-without a token check in `routes.go`, so they are fully public. Do not add new
-endpoints to that unprotected set.
+**Both are now protected** by `EXPORT_TOKEN` (task 002): a missing, empty or wrong
+token gets `404`, and an unset env var refuses everything. Do not add new endpoints
+without deciding which guard they belong behind.
 
 ---
 
@@ -370,11 +370,13 @@ Everything runs in containers — never run `go` on the host. One-offs:
 | Variable | Dev value | Notes |
 |---|---|---|
 | `YEAR` | `2026` | event year slug. **Required, no default** — an unset value stops the process at boot. Overridable with `-year` |
+| `EXPORT_TOKEN` | `dev-export-token` | **Required.** Guards `/qr` and `/geo` as a `?token=` parameter. Never reuse `SECRET` here |
+| `FOTO_BASE_URL` | `https://foto.local.nathejk.dk` | **Required.** Photograph bytes live at `<base>/photos/<ref>` |
 | `JETSTREAM_DSN` | `nats://jetstream:4222` | the local broker on the external `jetstream` network |
 | `DB_DSN` | `root:ib@tcp(mysql:3306)/skan?parseTime=true` | |
 | `SECRET` | `nh2025` | seeds the QR checksum; required. **Never** put this in a URL |
-| *token var for `/qr` + `/geo`* | not yet added | `EXPORT_TOKEN` — separate secret, passed as a GET parameter. See *Protecting `/qr` and `/geo`* |
-| *foto base URL* | not yet added | `FOTO_BASE_URL`, e.g. `https://foto.local.nathejk.dk`; photos are at `<base>/photos/<ref>`. Required by tasks 005/006 — never hardcode the host |
+| *token var for `/qr` + `/geo`* | done (task 002) | `EXPORT_TOKEN`, see above |
+| *foto base URL* | done (task 005) | `FOTO_BASE_URL`, see above |
 | `WEBROOT` | `/www` (flag default) | compose mounts `/webroot`; `routes.go` hardcodes `/webroot` |
 | `SMS_DSN`, `REDIS_ADDR` | set | currently unused by the code |
 
@@ -420,8 +422,8 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   the phone-number lookup, and the two views must differ per *What each role may
   see* — today a crew member gets the restricted bandit page, and the counts are
   fiction either way.
-- **`/geo` and `/qr` are completely public** — no login, no token — which breaks
-  the fair-game rule outright. See *Protecting `/qr` and `/geo`*.
+- **`/geo` and `/qr` are guarded by `EXPORT_TOKEN`** (task 002 — they were completely
+  public before).
 - **Rescans are unguarded.** Any repeat scan counts immediately; the 30-minute
   same-scanner confirmation is not implemented. Note also that the `scan` table's
   primary key is `(qrId, uts)` with `INSERT IGNORE`, so two scans of one code in
