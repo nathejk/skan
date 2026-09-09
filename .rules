@@ -329,6 +329,16 @@ before anything else runs.
 token gets `404`, and an unset env var refuses everything. Do not add new endpoints
 without deciding which guard they belong behind.
 
+### Role-dependent reads are the handler's job
+
+`scanResultData` in `routes.go` is the single place the bandit/crew split is applied,
+and `internal/login.User.IsBandit()` is the only source of the role. Two rules:
+
+- Omit crew-only values from the template data entirely for a bandit. Do not pass them
+  and hide them in markup — the pre-port page did that with a `display:hidden` div, and
+  data on a player's phone is data they have.
+- Do not even *query* a crew-only figure when the scanner is a bandit.
+
 ---
 
 ## Technology stack
@@ -421,30 +431,21 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   `docker build -f docker/Dockerfile --target prod -t skan:local .`
 - **`JETSTREAM_DSN` now points at the local broker** (`nats://jetstream:4222`) rather
   than the shared dev stream (task 009).
-- **Bandit vs crew views are not implemented.** `scanHandler` hardcodes
-  `isBandit: true`, `scanCount: 10`, `catchCount: 1`. The role should come from
-  the phone-number lookup, and the two views must differ per *What each role may
-  see* — today a crew member gets the restricted bandit page, and the counts are
-  fiction either way.
-- **`/geo` and `/qr` are guarded by `EXPORT_TOKEN`** (task 002 — they were completely
-  public before).
 - **Rescans are unguarded.** Any repeat scan counts immediately; the 30-minute
-  same-scanner confirmation is not implemented. Note also that the `scan` table's
-  primary key is `(qrId, uts)` with `INSERT IGNORE`, so two scans of one code in
-  the *same second* are silently discarded — that is accidental, not the rule.
-- **An unrecognised phone number produces a 500, not a message.** `LoginHandler`
-  marshals a `nil` user into the cookie as `null`; the next request then fails
-  `UserFromRequest` with a non-`ErrNoCookie` error, and `Authenticate` turns that
-  into `500 server error`. Failed and refused logins both need to re-render the
-  login page with a Danish explanation instead.
-- `coordinates.html` references `.remark`, which no handler supplies — comparing
-  a missing map key with `""` is a template execution error. It is a free-text
-  note about the patrol, carried over from the PHP app's `noticeText`.
+  same-scanner confirmation is not implemented (task 004). Note also that the `scan`
+  table's primary key is `(qrId, uts)` with `INSERT IGNORE`, so two scans of one code
+  in the *same second* are silently discarded — that is accidental, not the rule.
+- Consumers still build SQL with `%q`, which is not correct SQL quoting (task 013).
+- Registering a code redirects to a page that reads the projection it just wrote, so a
+  scanner can be bounced back to the registration page (task 015).
+- There is **no per-patrol remark**. `coordinates.html` used to reference `.remark`
+  (the PHP app's `noticeText`, shown in red to both roles) but no projection holds such
+  a field, so the markup was removed rather than faked. Reintroducing it needs somewhere
+  for the text to live first.
 - The year slug used by the projections' `year` **column** is a separate concern
   from `YEAR`: a projection must take it from the message subject, so a replay of an
-  older year is not relabelled with the current one. `scan` has the column but never
-  fills it, so `scan.Filter{YearSlug: …}` only works via its empty-string bypass;
-  `qr` has no `year` column at all.
+  older year is not relabelled with the current one. `qr` and `scan` now do this;
+  check any new projection does too.
 - **`go build ./...` and `go test ./...` currently fail**: the copied `photo`/
   `photocover` packages import `github.com/jrgensen/cqrs`, which is not in `go.mod`.
   This breaks the `air` dev loop (it runs the tests before rebuilding) and the
@@ -464,21 +465,23 @@ picking up, creating or updating a task.
 
 | ID | Title | Priority | Status | Depends on |
 |---|---|---|---|---|
-| 001 | Resolve scanner role from phone number at login | high | open | — |
-| 002 | Protect `/qr` and `/geo` with `EXPORT_TOKEN` | high | open | — |
-| 003 | Split the scan-result page by role, real counts | high | open | 001 |
+| 001 | Resolve scanner role from phone number at login | high | **done** | — |
+| 002 | Protect `/qr` and `/geo` with `EXPORT_TOKEN` | high | **done** | — |
+| 003 | Split the scan-result page by role, real counts | high | **done** | 001 |
 | 004 | Confirmation guard against accidental rescans | medium | open | — |
-| 005 | Wire up the `photo` and `photocover` projections | high | open | 007 |
-| 006 | Show the cover photo + confirm identity before registering | high | open | 005 |
-| 007 | Complete switch to `jrgensen/stream` + `cqrs`, delete `superfluids` | high | open | — |
+| 005 | Wire up the `photo` and `photocover` projections | high | **done** | 007 |
+| 006 | Show the cover photo + confirm identity before registering | high | **done** | 005 |
+| 007 | Complete switch to `jrgensen/stream` + `cqrs`, delete `superfluids` | high | **done** | — |
 | 008 | Make the event year configurable via `YEAR` | high | **done** | — |
 | 009 | Direct Traefik routing + local JetStream | high | **done** | — |
 | 010 | Ship `webroot` in the prod image | medium | **done** | — |
 | 011 | Manual scanning removed (real QR codes only) | medium | **done** | — |
 | 012 | Delete dead inherited code | medium | **done** | — |
+| 013 | Replace `%q` with correct SQL quoting in consumers | medium | open | — |
+| 014 | Scope QR ids by year | high | **done** | — |
+| 015 | Registration redirect races the projection | medium | open | — |
 
-**007 is the current bottleneck**: `go build ./...` and `go test ./...` fail without
-it, which breaks the `air` dev loop and the production image, and it gates 005 → 006.
+**Open: 004, 013, 015.**
 
 When you implement one, work the task file as you go rather than retro-filling it, and
 update the *Known deviations* list here once the deviation is actually gone.

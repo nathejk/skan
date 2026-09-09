@@ -43,6 +43,14 @@ type QrInterface interface {
 }
 type ScanInterface interface {
 	GetAll(context.Context, scan.Filter) ([]*scan.Scan, error)
+
+	// CountByTeam is every scan of a patrulje. Crew-only — it reveals checkpoint
+	// progress, which a bandit must not learn.
+	CountByTeam(ctx context.Context, teamID types.TeamID) (int, error)
+
+	// CountCatchesByTeam is how many times bandits have caught a patrulje. Visible to
+	// both roles.
+	CountCatchesByTeam(ctx context.Context, teamID types.TeamID) (int, error)
 }
 
 // PhotoInterface is the subset of the photo projection this service reads. Only

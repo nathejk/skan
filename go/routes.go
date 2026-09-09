@@ -14,6 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/login"
+	"nathejk.dk/nathejk/table/patrulje"
+	"nathejk.dk/nathejk/table/qr"
 	"nathejk.dk/nathejk/table/scan"
 )
 
@@ -197,6 +199,36 @@ func (a *App) renderLogin(w http.ResponseWriter, r *http.Request, page login.Pag
 	}
 }
 
+// scanResultData builds the template data for a scan result, per role.
+//
+// Extracted from the handler so the fair-game rule is testable, and stated once:
+// **bandits may only learn about bandits.** A bandit is a player, so anything they
+// see about a patrol's progress through the race is an unfair advantage. Crew are not
+// players — checkpoint staff, guides, samaritter — and may see everything.
+//
+// The crew-only value is **omitted from the map entirely** for a bandit, rather than
+// included and hidden by the template. The old page shipped both counts to every
+// scanner inside a `style="display:hidden"` div; hiding data already delivered to a
+// player's phone is not a boundary.
+//
+// Counts are as of *before* this scan: the page renders first and `PUT /register`
+// records the scan afterwards, so the template wording says "før" and treats zero
+// catches as "first time".
+func scanResultData(qrRow *qr.QR, team *patrulje.Patrulje, photoURL string, isBandit bool, catchCount, scanCount int) map[string]any {
+	data := map[string]any{
+		"qr":         qrRow,
+		"armNumber":  fmt.Sprintf("%s-%d", team.TeamNumber, team.MemberCount),
+		"team":       team,
+		"photo":      photoURL,
+		"isBandit":   isBandit,
+		"catchCount": catchCount,
+	}
+	if !isBandit {
+		data["scanCount"] = scanCount
+	}
+	return data
+}
+
 func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 	user, _ := login.UserFromRequest(r)
 	if user == nil {
@@ -228,16 +260,24 @@ func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error (scan)", http.StatusInternalServerError)
 		return
 	}
-	data := map[string]any{
-		"qr":         qr,
-		"armNumber":  fmt.Sprintf("%s-%d", patrulje.TeamNumber, patrulje.MemberCount),
-		"team":       patrulje,
-		"scanCount":  10,
-		"catchCount": 1,
-		"photo":      a.coverPhotoThumbURL(r.Context(), patrulje.TeamID),
-		"remark":     "",
-		"isBandit":   true,
+
+	catchCount, err := a.models.Scan.CountCatchesByTeam(r.Context(), patrulje.TeamID)
+	if err != nil {
+		log.Printf("counting catches for %s: %v", patrulje.TeamID, err)
 	}
+	// Only read the crew-only count when the scanner is entitled to it.
+	scanCount := 0
+	if !user.IsBandit() {
+		if scanCount, err = a.models.Scan.CountByTeam(r.Context(), patrulje.TeamID); err != nil {
+			log.Printf("counting scans for %s: %v", patrulje.TeamID, err)
+		}
+	}
+
+	data := scanResultData(
+		qr, patrulje,
+		a.coverPhotoThumbURL(r.Context(), patrulje.TeamID),
+		user.IsBandit(), catchCount, scanCount,
+	)
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

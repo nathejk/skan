@@ -83,13 +83,10 @@ seniors — a senior signed up to a klan *is* a bandit) — the two roles are in
 to see different things after a scan. There is no role picker: your phone number
 *is* your role.
 
-If the same phone number is registered both as crew and as a senior, the app
-can't tell which one you are — so it refuses the login and asks you to contact HQ
-to get one of the registrations removed.
-
-> Neither the role-specific views nor the duplicate-number check are built yet:
-> today every scanner sees the bandit variant, and a number in both tables
-> silently logs in as crew. See *Known gaps*.
+If the same phone number is registered both as crew and as a senior in the same year,
+the app can't tell which one you are — so it refuses the login and asks you to contact
+HQ to get one of the registrations removed. Being crew one year and a senior another is
+fine: only the year being run is consulted.
 
 ### 5. Bandits and crew see different things
 
@@ -107,6 +104,9 @@ the scouts, or a samarit taping up blisters. **Crew see everything.**
 | How many times bandits have caught them | yes | yes |
 | Total number of scans, checkpoints included | no | yes |
 | Checkpoint activity and positions | no | yes |
+
+A bandit's page is not merely missing those figures — they are never sent to the
+browser, and not even looked up.
 
 ### 6. Catching the same patrol twice
 
@@ -274,13 +274,6 @@ to Go; those original templates are gone too.
 Short, honest list — details and more items in `.rules`, tracked as tasks under
 `roadmap/tasks/`.
 
-- **Bandit and crew see the same page.** The scan result page hardcodes the bandit
-  variant, along with placeholder catch/scan counts — so crew currently get *less*
-  than they should, and both get invented numbers (tasks 001, 003).
-- **A phone number registered as both crew and senior logs in as crew.** It should
-  be refused with a "contact HQ" message instead (task 001).
-- **An unknown phone number returns a 500** rather than a "we don't know that
-  number" message (task 001).
 - **Nothing guards against accidental rescans**; the 30-minute confirmation isn't
   built. Related: two scans of one code in the *same second* are silently discarded,
   because the `scan` table is keyed `(qrId, uts)` with `INSERT IGNORE` (task 004).
@@ -291,6 +284,8 @@ Short, honest list — details and more items in `.rules`, tracked as tasks unde
   (task 013).
 - **Registering a code races its own projection**, so a scanner can briefly be
   bounced back to the page they just completed (task 015).
+- **There is no per-patrol remark.** The old app could show a red note about a patrol;
+  no projection holds one, so the markup was removed rather than faked.
 
 ---
 

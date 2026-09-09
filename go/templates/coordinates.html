@@ -17,23 +17,26 @@
       <div class="success starter-template">
 
         <h1>{{ .armNumber }}. {{ .team.Name }}</h1>
+        {{ if .photo }}
         <div class="row">
             <div class="col-md-3"></div>
             <img src="{{ .photo }}" alt="Billede af patruljen" class="img-rounded col-md-6">
         </div>
-                <p class="lead">Din scanning er registreret</p>
-            <div style="display:hidden">
+        {{ end }}
+        <p class="lead">Din scanning er registreret</p>
+
+        {{/* Counts are as of before this scan: the page loads, then the position is
+             sent and the scan recorded. Hence "før". */}}
         {{ if .isBandit }}
-            {{ if eq .catchCount 1 }}
-                <p class="lead">BINGO, det er først gang at denne patrulje bliver fanget</p>
+            {{ if eq .catchCount 0 }}
+                <p class="lead">BINGO, det er første gang denne patrulje bliver fanget!</p>
             {{ else }}
-                <p class="lead">Denne patrulje er nu blevet fanget {{ .catchCount }} gange.</p>
+                <p class="lead">Denne patrulje er fanget {{ .catchCount }} gange før.</p>
             {{ end }}
         {{ else }}
-            <p class="lead">Denne patrulje er blevet fanget {{ .catchCount }} gange - i alt er de nu blevet scannet {{ .scanCount }} gange</p>
+            <p class="lead">Denne patrulje er fanget {{ .catchCount }} gange af banditter,
+            og scannet {{ .scanCount }} gange i alt.</p>
         {{ end }}
-        {{ if ne .remark "" }}<p class="lead" style="color:red">{{ .remark }}</p>{{ end }}
-            </div>
       </div>
     </main>
 <script type="text/javascript">
