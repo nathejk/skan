@@ -51,6 +51,10 @@ type ScanInterface interface {
 	// CountCatchesByTeam is how many times bandits have caught a patrulje. Visible to
 	// both roles.
 	CountCatchesByTeam(ctx context.Context, teamID types.TeamID) (int, error)
+
+	// LatestByTeam is the patrulje's most recent scan, for the accidental-rescan
+	// guard. Returns ErrRecordNotFound when the patrol has never been scanned.
+	LatestByTeam(ctx context.Context, teamID types.TeamID) (*scan.Scan, error)
 }
 
 // PhotoInterface is the subset of the photo projection this service reads. Only

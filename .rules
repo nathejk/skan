@@ -431,10 +431,12 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   `docker build -f docker/Dockerfile --target prod -t skan:local .`
 - **`JETSTREAM_DSN` now points at the local broker** (`nats://jetstream:4222`) rather
   than the shared dev stream (task 009).
-- **Rescans are unguarded.** Any repeat scan counts immediately; the 30-minute
-  same-scanner confirmation is not implemented (task 004). Note also that the `scan`
-  table's primary key is `(qrId, uts)` with `INSERT IGNORE`, so two scans of one code
-  in the *same second* are silently discarded — that is accidental, not the rule.
+- **Rescans are guarded** (task 004): the same scanner scanning the same patrulje
+  within 30 minutes gets a confirmation prompt via a `409` from `PUT /register`. The
+  `scan` primary key is `(qrId, uts, scannerId)`, so only the *same* scanner twice in
+  one second is deduped — a double-submit, not two catches.
+- The geolocation fallback asks for a typed map coordinate and then **discards it**
+  (task 016), so such a scan is stored with no position.
 - Consumers still build SQL with `%q`, which is not correct SQL quoting (task 013).
 - Registering a code redirects to a page that reads the projection it just wrote, so a
   scanner can be bounced back to the registration page (task 015).
@@ -468,7 +470,7 @@ picking up, creating or updating a task.
 | 001 | Resolve scanner role from phone number at login | high | **done** | — |
 | 002 | Protect `/qr` and `/geo` with `EXPORT_TOKEN` | high | **done** | — |
 | 003 | Split the scan-result page by role, real counts | high | **done** | 001 |
-| 004 | Confirmation guard against accidental rescans | medium | open | — |
+| 004 | Confirmation guard against accidental rescans | medium | **done** | — |
 | 005 | Wire up the `photo` and `photocover` projections | high | **done** | 007 |
 | 006 | Show the cover photo + confirm identity before registering | high | **done** | 005 |
 | 007 | Complete switch to `jrgensen/stream` + `cqrs`, delete `superfluids` | high | **done** | — |
@@ -480,8 +482,9 @@ picking up, creating or updating a task.
 | 013 | Replace `%q` with correct SQL quoting in consumers | medium | open | — |
 | 014 | Scope QR ids by year | high | **done** | — |
 | 015 | Registration redirect races the projection | medium | open | — |
+| 016 | Typed map coordinates are discarded | medium | open | — |
 
-**Open: 004, 013, 015.**
+**Open: 013, 015, 016.**
 
 When you implement one, work the task file as you go rather than retro-filling it, and
 update the *Known deviations* list here once the deviation is actually gone.

@@ -26,38 +26,60 @@
         <p class="lead">Din scanning er registreret</p>
 
         {{/* Counts are as of before this scan: the page loads, then the position is
-             sent and the scan recorded. Hence "før". */}}
+             sent and the scan recorded. Hence "før". Danish needs gang/gange, so the
+             singular is spelled out rather than printing "1 gange". */}}
         {{ if .isBandit }}
             {{ if eq .catchCount 0 }}
                 <p class="lead">BINGO, det er første gang denne patrulje bliver fanget!</p>
+            {{ else if eq .catchCount 1 }}
+                <p class="lead">Denne patrulje er fanget én gang før.</p>
             {{ else }}
                 <p class="lead">Denne patrulje er fanget {{ .catchCount }} gange før.</p>
             {{ end }}
         {{ else }}
-            <p class="lead">Denne patrulje er fanget {{ .catchCount }} gange af banditter,
-            og scannet {{ .scanCount }} gange i alt.</p>
+            <p class="lead">Denne patrulje er fanget
+            {{- if eq .catchCount 1 }} én gang{{ else }} {{ .catchCount }} gange{{ end }}
+            af banditter, og scannet
+            {{- if eq .scanCount 1 }} én gang{{ else }} {{ .scanCount }} gange{{ end }}
+            i alt.</p>
         {{ end }}
       </div>
     </main>
 <script type="text/javascript">
- // Make an HTTP PUT Request
-async function  put( data) {
+// Send the scan. On 409 the server is asking whether a quick repeat should count:
+// re-send once with confirm set if the scanner says yes. The decision is the
+// server's -- this only relays the question.
+async function put(data, confirmed) {
     data.qrId = '{{ .qr.ID }}'
-       data.teamNumber = {{ .team.TeamNumber }} | 0
-       const url = '/register'
-    const response = await fetch(url, {
+    data.teamNumber = {{ .team.TeamNumber }} | 0
+    if (confirmed) { data.confirm = true }
+
+    const response = await fetch('/register', {
       method: 'PUT',
-      headers: {
-        'Content-type': 'application/json'
-      },
+      headers: { 'Content-type': 'application/json' },
       body: JSON.stringify(data)
     });
-    
-       document.getElementById('main').className = response.ok ? 'success' : ''
+
+    if (response.status === 409 && !confirmed) {
+        let message = 'Skal dette tælle som en ny scanning?'
+        try {
+            const body = await response.json()
+            if (body && body.message) { message = body.message }
+        } catch (e) { /* keep the default question */ }
+
+        if (window.confirm(message)) {
+            return put(data, true)
+        }
+        // Declined: nothing was recorded, and the page says so.
+        document.getElementById('main').className = ''
+        return
+    }
+
+    document.getElementById('main').className = response.ok ? 'success' : ''
 }
 
 function register(data) {
-     put(data)
+     put(data, false)
 }
   function getLocation(pos)
   {

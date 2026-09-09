@@ -119,8 +119,6 @@ So two scans half an hour apart just count, and so do two of your scans with
 another scanner's in between — only an immediate repeat by the same person asks a
 question.
 
-> Not implemented yet — every rescan currently counts without asking.
-
 ```mermaid
 flowchart TD
     A[Scan sticker] --> B{Logged in?}
@@ -274,9 +272,6 @@ to Go; those original templates are gone too.
 Short, honest list — details and more items in `.rules`, tracked as tasks under
 `roadmap/tasks/`.
 
-- **Nothing guards against accidental rescans**; the 30-minute confirmation isn't
-  built. Related: two scans of one code in the *same second* are silently discarded,
-  because the `scan` table is keyed `(qrId, uts)` with `INSERT IGNORE` (task 004).
 - **The login cookie is unsigned**, so a scanner's identity can be forged. Fine
   for a scouting race, not fine for anything sensitive.
 - **Consumers build SQL with Go's `%q`**, which is not correct SQL quoting; it works
@@ -286,6 +281,9 @@ Short, honest list — details and more items in `.rules`, tracked as tasks unde
   bounced back to the page they just completed (task 015).
 - **There is no per-patrol remark.** The old app could show a red note about a patrol;
   no projection holds one, so the markup was removed rather than faked.
+- **A hand-typed map coordinate is discarded.** If the browser won't give a position,
+  the page asks the scanner to type one — and then throws it away, so the scan is
+  recorded with no location at all (task 016).
 
 ---
 

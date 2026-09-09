@@ -3,9 +3,11 @@ package scan
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/nathejk/shared-go/types"
+	tables "nathejk.dk/nathejk/table"
 )
 
 type querier struct {
@@ -44,6 +46,39 @@ func (q *querier) GetAll(ctx context.Context, filters Filter) ([]*Scan, error) {
 	//metadata := calculateMetadata(filters.Year, totalRecords, filters.Page, filters.PageSize)
 
 	return scans, nil
+}
+
+// LatestByTeam returns the patrulje's most recent scan, by anyone.
+//
+// Used by the accidental-rescan guard. The check is on the **patrulje**, not the QR
+// code: a patrol picks up a new map with a new code several times during the race, so
+// a code-based check would miss exactly the double-scan being guarded against.
+//
+// Only the single most recent scan matters. If somebody else scanned in between, the
+// repeat is not accidental — two bandits catching the same patrol in quick succession
+// is ordinary play.
+func (q *querier) LatestByTeam(ctx context.Context, teamID types.TeamID) (*Scan, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	const query = `SELECT qrId, teamId, teamNumber, scannerId, scannerPhone, uts, latitude, longitude
+		FROM scan
+		WHERE teamId = ?
+		ORDER BY uts DESC
+		LIMIT 1`
+
+	var r Scan
+	err := q.db.QueryRowContext(ctx, query, teamID).Scan(
+		&r.QrID, &r.TeamID, &r.TeamNumber, &r.ScannerID, &r.ScannerPhone,
+		&r.Uts, &r.Latitude, &r.Longitude,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, tables.ErrRecordNotFound
+		}
+		return nil, err
+	}
+	return &r, nil
 }
 
 // CountByTeam is every scan of a patrulje, by anyone.

@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/login"
+	tables "nathejk.dk/nathejk/table"
 	"nathejk.dk/nathejk/table/patrulje"
 	"nathejk.dk/nathejk/table/qr"
 	"nathejk.dk/nathejk/table/scan"
@@ -306,6 +308,44 @@ func (a *App) aboutHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+// rescanWindow is how recently the same scanner must have scanned the same patrulje
+// for a repeat to look accidental.
+//
+// Thirty minutes is HQ's rule. Long enough that a fumbled double scan is caught, short
+// enough that genuinely catching the same patrol twice in a night does not nag.
+const rescanWindow = 30 * time.Minute
+
+// needsRescanConfirmation reports whether a scan should be held for an explicit
+// "yes, this really is a new scan" before being recorded.
+//
+// The rule, from HQ: look at the patrol's **single most recent** scan; if it was made
+// by the same scanner less than 30 minutes ago, ask. Otherwise record straight away.
+//
+// Consequences, all intended:
+//
+//	same scanner, 5 min apart, nothing in between  -> ask
+//	same scanner, 45 min apart                     -> record
+//	same scanner twice, someone else in between    -> record
+//	a different scanner immediately after          -> record
+//
+// A rescan *counts* — bandits do catch the same patrol more than once, so catchCount
+// is a plain count of scans. This only guards against the same person recording one
+// catch twice.
+func needsRescanConfirmation(latest *scan.Scan, scannerID string, now time.Time) bool {
+	if latest == nil {
+		return false
+	}
+	if latest.ScannerID != scannerID {
+		// Somebody else scanned in between, so this repeat is ordinary play.
+		return false
+	}
+	elapsed := now.Sub(time.Unix(latest.Uts, 0))
+	// A negative elapsed means clock skew between the app and the stream; treat it as
+	// recent rather than as ancient, so skew cannot switch the guard off.
+	return elapsed < rescanWindow
+}
+
 func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 	type input struct {
 		QrID       types.QrID `json:"qrId"`
@@ -313,6 +353,9 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 		Prompt     string     `json:"prompt"`
 		Latitude   string     `json:"latitude"`
 		Longitude  string     `json:"longitude"`
+		// Confirm is the scanner answering "yes, count this as a new scan" after being
+		// asked. The page re-sends the same request with this set.
+		Confirm bool `json:"confirm"`
 	}
 	var in input
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -330,13 +373,33 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "No user", http.StatusForbidden)
 		return
 	}
-	if err := a.commands.QR.Scan(in.QrID, *patrulje, *user, in.Latitude, in.Longitude); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+
+	// The guard runs server-side, against the patrol's scan history — not in the
+	// browser, and not on the QR code.
+	if !in.Confirm {
+		latest, err := a.models.Scan.LatestByTeam(r.Context(), patrulje.TeamID)
+		if err != nil && !errors.Is(err, tables.ErrRecordNotFound) {
+			// Never refuse a scan because the history could not be read. Recording a
+			// possible duplicate is recoverable; losing a catch is not.
+			log.Printf("reading latest scan for %s: %v", patrulje.TeamID, err)
+		} else if needsRescanConfirmation(latest, string(user.ID), time.Now()) {
+			// Not recorded yet — the page asks, then re-sends with confirm set. This is
+			// deliberately not a silent drop: the scanner must be able to say yes and
+			// have it count.
+			a.writeJSON(w, http.StatusConflict, Envelope{
+				"status":  "confirm",
+				"message": "Du har lige scannet denne patrulje. Skal dette tælle som en ny scanning?",
+			}, nil)
+			return
+		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(`{"status":"ok"}`))
+	if err := a.commands.QR.Scan(in.QrID, *patrulje, *user, in.Latitude, in.Longitude); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	a.writeJSON(w, http.StatusCreated, Envelope{"status": "ok"}, nil)
 }
 
 // requireExportToken guards the machine endpoints, /qr and /geo.
