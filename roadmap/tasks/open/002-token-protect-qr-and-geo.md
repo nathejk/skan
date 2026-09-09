@@ -25,7 +25,8 @@ they are protected by a **secret token passed as a GET parameter** (decided; see
 
 Implementation requirements:
 
-- Use a **separate environment variable**, *not* `SECRET`. `SECRET` seeds the QR
+- Use a **separate environment variable**, `EXPORT_TOKEN` (confirmed by HQ), *not*
+  `SECRET`. `SECRET` seeds the QR
   checksum, and a query-string token leaks into browser history, proxy logs and
   `Referer` headers. Leaking `SECRET` would let anyone compute valid URLs for every
   sticker, printed or not, recoverable only by reprinting the whole run. Keep the
@@ -43,7 +44,7 @@ bandits.
 
 ## Acceptance Criteria
 
-- [ ] A new env var (name to be chosen, e.g. `EXPORT_TOKEN`) is read at startup and
+- [ ] `EXPORT_TOKEN` is read at startup and
       threaded to the handlers — not read ad hoc via `os.Getenv` inside them
 - [ ] `/qr` and `/geo` return `404` when the token is missing, empty or wrong
 - [ ] Both endpoints work with a correct token
@@ -62,3 +63,4 @@ bandits.
 - 2026-09-08 00:00 — Task created. Found during a documentation pass: both routes
   are wired without `user.Authenticate`. HQ decided on a GET-parameter token rather
   than a login, since these feed printing and GIS tooling.
+- 2026-09-08 04:30 — HQ confirmed the variable name: `EXPORT_TOKEN`.

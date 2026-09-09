@@ -185,6 +185,17 @@ docker compose up
 | Database admin (Adminer) | http://mysql.skan.local.nathejk.dk |
 | Redis admin | http://redis.skan.local.nathejk.dk |
 
+Each service registers itself with Traefik directly — there is no gateway container.
+The app is served over HTTPS (HTTP redirects to it) because the scan pages use the
+browser's geolocation API, which only works in a secure context.
+
+The production image is deliberately **not** a compose service, since building it runs
+the full test/lint/vulnerability gate. Build it explicitly:
+
+```sh
+docker build -f docker/Dockerfile --target prod -t skan:local .
+```
+
 The Go process rebuilds and restarts itself on every file change under `go/`
 (via [air](https://github.com/air-verse/air)), and runs the test suite as part of
 each rebuild.
@@ -195,9 +206,8 @@ Run a one-off command in the container:
 docker compose run --rm api go test ./...
 ```
 
-> Heads up: by default the dev stack connects to the **shared** JetStream at
-> `dev.nathejk.dk`, so local scans are written to shared dev data. Override
-> `JETSTREAM_DSN` in `docker-compose.override.yml` if you want isolation.
+> Heads up: the dev stack talks to the JetStream broker on the shared `jetstream`
+> network at `nats://jetstream:4222`.
 
 ---
 
@@ -207,6 +217,7 @@ docker compose run --rm api go test ./...
 skan/
 ├── docker-compose.yml     dev stack
 ├── docker/Dockerfile      dev / build / prod stages
+├── roadmap/tasks/         the task board
 ├── webroot/               static files
 └── go/                    the entire application
     ├── main.go            wiring
@@ -215,7 +226,7 @@ skan/
     ├── nathejk/commands/  publishing events (the write side)
     ├── nathejk/table/     turning events into SQL tables (the read side)
     ├── internal/login/    phone-number login
-    └── superfluids/       JetStream plumbing
+    └── superfluids/       JetStream plumbing (being replaced)
 ```
 
 Pages are rendered server-side with Go's `html/template`. There is no frontend
@@ -234,10 +245,9 @@ task 007 completes the switch and deletes the legacy packages.
 Patrol photographs are not stored here. The projections hold content-hash refs, and
 the bytes come from the `foto` service at `<foto-base-url>/photos/<ref>`.
 
-Some directories are inherited from sibling Nathejk repos and unused here (for
-example `go/nathejk/table/spejder`, `go/nathejk/table/scanner`). See `.rules` for
-the full list. This app was a PHP/Twig application before the port to Go; those
-original templates have been deleted.
+Some directories were inherited from sibling Nathejk repos and never used here; they
+have now been deleted (task 012). This app was a PHP/Twig application before the port
+to Go; those original templates are gone too.
 
 ---
 
@@ -247,8 +257,8 @@ original templates have been deleted.
 |---|---|
 | `YEAR` | The event year, e.g. `2026`. **Required** — the app refuses to start without it, deliberately, since a wrong year silently finds no data. |
 | `SECRET` | Seeds the QR URL checksum. **Required.** Changing it breaks printed stickers, so never expose it in a URL. |
-| *(token var, not yet added)* | The secret token for `/qr` and `/geo`, passed as a query parameter. Deliberately a different secret from `SECRET`. |
-| *(foto base URL, not yet added)* | Base URL of the `foto` service, e.g. `https://foto.local.nathejk.dk`. Patrol photos live at `<base>/photos/<ref>`. |
+| `EXPORT_TOKEN` | *(not yet implemented)* The secret token for `/qr` and `/geo`, passed as a query parameter. Deliberately a different secret from `SECRET`. |
+| `FOTO_BASE_URL` | *(not yet implemented)* Base URL of the `foto` service, e.g. `https://foto.local.nathejk.dk`. Patrol photos live at `<base>/photos/<ref>`. |
 | `JETSTREAM_DSN` | NATS JetStream connection |
 | `DB_DSN` | MariaDB connection |
 | `WEBROOT` | Static file directory |
@@ -269,7 +279,9 @@ Short, honest list — details and more items in `.rules`.
 - **The build is currently broken.** The `photo`/`photocover` packages import a
   module that isn't in `go.mod`, so `go build ./...` and `go test ./...` fail —
   which also stops the `air` dev loop from rebuilding and breaks the production
-  image build. Task 005 resolves it.
+  image build. Task 005/007 resolve it, and it is the current bottleneck.
+- **Manual scans (`POST /`) publish a fabricated QR id `"x"`**, so they all share one
+  primary key space and two in the same second silently drop one (task 011).
 - **Every patrol shows the same stock photo.** Both the scan page and the
   registration confirmation hardcode `/groupphoto.jpg`, so the "is this the right
   patrol?" confirmation currently confirms nothing. The `photo` and `photocover`
@@ -298,7 +310,7 @@ than writing to the database directly.
 
 Work is tracked on a file-based board in `roadmap/tasks/` — `open/`, `doing/` and
 `done/` folders holding one Markdown file per task, with the conventions in
-`roadmap/tasks/TASKS.md`. The known gaps listed above are tasks 001–007.
+`roadmap/tasks/TASKS.md`. The gaps listed above are tasks 001–012.
 
 ## Credits
 

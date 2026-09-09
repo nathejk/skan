@@ -75,7 +75,7 @@ practice. It must be the well-tested one.
 
 - Registration is published via `a.commands.QR.Register`; the confirmation gate
   belongs in the handler before that call, never in the template.
-- Image URLs are `<foto-base-url>/photos/<ref>`, with the base URL from an env var
+- Image URLs are `<FOTO_BASE_URL>/photos/<ref>`, with the base URL from the env var
   wired up in 005. Never hardcode the host.
 - `doMapHandler` currently accepts any `confirmed` form value that parses to a team
   number, with no evidence a photo was shown. Whatever gate is added must not be

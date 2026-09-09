@@ -53,7 +53,8 @@ service:
 https://foto.local.nathejk.dk/photos/e3875accb257a8717b17e72353020e8c50fa131ee8978bea61177ed7f8a7a567
 ```
 
-The base URL **must come from an environment variable** — never hardcode the host.
+The base URL **must come from an environment variable**, `FOTO_BASE_URL` (confirmed
+by HQ) — never hardcode the host.
 Skan therefore needs **no** blob store, no credentials and no byte-serving route;
 `photo.Servable` is not needed here. Add the variable to `docker-compose.yml` with
 the `foto.local.nathejk.dk` dev value and document it in `.rules` and `README.md`.
@@ -95,7 +96,7 @@ the `foto.local.nathejk.dk` dev value and document it in `.rules` and `README.md
 - [ ] A team's cover ref is reachable from a handler via a `data.Models` interface
 - [ ] A ref can be turned into an image URL using a base URL read from an env var,
       with no hardcoded host anywhere
-- [ ] Env var added to `docker-compose.yml` and documented in `.rules` + `README.md`
+- [ ] Env var `FOTO_BASE_URL` added to `docker-compose.yml` and documented in `.rules` + `README.md`
 - [ ] The year used for photo reads comes from configuration, not a second
       hardcoded `"2025"`
 - [ ] The copied `photo` package is unmodified

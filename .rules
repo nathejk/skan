@@ -217,12 +217,13 @@ skan/
     └── superfluids/         # LEGACY → github.com/jrgensen/stream
 ```
 
-Several files are **inherited from sibling Nathejk repos and unused here** —
-`nathejk/table/spejder`, `signup`, `payment`, `pincode*`, `registrant*`,
-`nathejk/commands/team.go`, `internal/data/{teams,members,users,tokens,permissions}`,
-and `nathejk/table/scanner/` (a verbatim copy of `personnel`, still declaring
-`package personnel`). Do not extend them; if you touch that area, prefer deleting
-the dead copy over editing it.
+Several files were **inherited from sibling Nathejk repos and unused here**; they
+have been **deleted** (task 012) — `nathejk/table/{spejder,signup,payment,scanner}`,
+the loose `pincode`/`registrant`/`spejderstatus`/`patruljestatus`/`confirm` files,
+`nathejk/commands/{team,types}.go`, and
+`internal/data/{teams,members,users,tokens,permissions,signup,filters}.go`.
+`nathejk/table/errors.go` was kept, because `tables.ErrRecordNotFound` is live.
+`data.Models` is now exactly the six projections this service reads.
 
 ### Legacy note
 
@@ -351,7 +352,7 @@ endpoints to that unprotected set.
 ## Development
 
 ```sh
-docker compose up          # api + mysql + adminer + gw
+docker compose up          # api + mysql + adminer + redis + redis-commander
 ```
 
 Requires the external `traefik` and `jetstream` networks from the org infra repo.
@@ -369,11 +370,11 @@ Everything runs in containers — never run `go` on the host. One-offs:
 | Variable | Dev value | Notes |
 |---|---|---|
 | `YEAR` | `2026` | event year slug. **Required, no default** — an unset value stops the process at boot. Overridable with `-year` |
-| `JETSTREAM_DSN` | `nats://dev.nathejk.dk:4222` | points at **shared dev**, not the local `jetstream` network |
+| `JETSTREAM_DSN` | `nats://jetstream:4222` | the local broker on the external `jetstream` network |
 | `DB_DSN` | `root:ib@tcp(mysql:3306)/skan?parseTime=true` | |
 | `SECRET` | `nh2025` | seeds the QR checksum; required. **Never** put this in a URL |
-| *token var for `/qr` + `/geo`* | not yet added | separate secret, passed as a GET parameter — see *Protecting `/qr` and `/geo`* |
-| *foto base URL* | not yet added | e.g. `https://foto.local.nathejk.dk`; photos are at `<base>/photos/<ref>`. Required by tasks 005/006 — never hardcode the host |
+| *token var for `/qr` + `/geo`* | not yet added | `EXPORT_TOKEN` — separate secret, passed as a GET parameter. See *Protecting `/qr` and `/geo`* |
+| *foto base URL* | not yet added | `FOTO_BASE_URL`, e.g. `https://foto.local.nathejk.dk`; photos are at `<base>/photos/<ref>`. Required by tasks 005/006 — never hardcode the host |
 | `WEBROOT` | `/www` (flag default) | compose mounts `/webroot`; `routes.go` hardcodes `/webroot` |
 | `SMS_DSN`, `REDIS_ADDR` | set | currently unused by the code |
 
@@ -387,12 +388,19 @@ table (or the DB) in dev.
 
 Flag or fix these deliberately; don't quietly copy the pattern.
 
-- **Compose uses a `gw` gateway container** (`jrgensen/gateway`) with
-  `PROXY_MAPPINGS` and a single Traefik router, instead of the org's per-service
-  Traefik labels. `api` also publishes a port. Migrating to the standard pattern
-  is a pending piece of work.
-- **`JETSTREAM_DSN` points at `dev.nathejk.dk`**, so local runs read and write the
-  shared dev stream.
+- **Compose no longer uses a gateway container.** Each web-exposed service declares
+  its own Traefik labels and joins the external `traefik` network (task 009).
+  `api` uses the **HTTPS-redirect** pattern, because the scan pages call
+  `navigator.geolocation`, which browsers only expose in a secure context. Note the
+  redirect middleware is declared **per repo** (`skan-redirect-to-https`): there is
+  no shared `redirect-to-https@docker` on the running Traefik, despite what the
+  org-wide rules say, and referencing one disables the router.
+- **The `prod` image is not a compose service.** Building it runs the full
+  test/lint/vuln gate with no source mount, so `docker compose up` used to build and
+  fail on it. Build it explicitly:
+  `docker build -f docker/Dockerfile --target prod -t skan:local .`
+- **`JETSTREAM_DSN` now points at the local broker** (`nats://jetstream:4222`) rather
+  than the shared dev stream (task 009).
 - **Bandit vs crew views are not implemented.** `scanHandler` hardcodes
   `isBandit: true`, `scanCount: 10`, `catchCount: 1`. The role should come from
   the phone-number lookup, and the two views must differ per *What each role may
@@ -412,9 +420,10 @@ Flag or fix these deliberately; don't quietly copy the pattern.
 - `coordinates.html` references `.remark`, which no handler supplies — comparing
   a missing map key with `""` is a template execution error. It is a free-text
   note about the patrol, carried over from the PHP app's `noticeText`.
-- `doIndexHandler` (`POST /`) publishes a scan with the literal QR id `"x"`.
-- The `prod` Dockerfile stage copies the binary but **not** `webroot/`, while
-  `routes.go` serves `/webroot` — static files are missing in production images.
+- `doIndexHandler` (`POST /`) publishes a scan with the literal QR id `"x"`, so all
+  manual scans share one `(qrId, uts)` key space and collide within a second
+  (task 011 — needs a decision, since every fix touches either the key or a
+  shared-go message type).
 - The year slug used by the projections' `year` **column** is a separate concern
   from `YEAR`: a projection must take it from the message subject, so a replay of an
   older year is not relabelled with the current one. `scan` has the column but never
@@ -437,18 +446,25 @@ Tasks live in `roadmap/tasks/{open,doing,done}/` per the org-wide file-based
 kanban system; `roadmap/tasks/TASKS.md` holds the conventions. Read it before
 picking up, creating or updating a task.
 
-| ID | Title | Priority | Depends on |
-|---|---|---|---|
-| 001 | Resolve scanner role from phone number at login | high | — |
-| 002 | Protect `/qr` and `/geo` with a secret token | high | — |
-| 003 | Split the scan-result page by role, real counts | high | 001 |
-| 004 | Confirmation guard against accidental rescans | medium | — |
-| 005 | Wire up the `photo` and `photocover` projections | high | 007 |
-| 006 | Show the cover photo + confirm identity before registering | high | 005 |
-| 007 | Complete switch to `jrgensen/stream` + `cqrs`, delete `superfluids` | high | — |
+| ID | Title | Priority | Status | Depends on |
+|---|---|---|---|---|
+| 001 | Resolve scanner role from phone number at login | high | open | — |
+| 002 | Protect `/qr` and `/geo` with `EXPORT_TOKEN` | high | open | — |
+| 003 | Split the scan-result page by role, real counts | high | open | 001 |
+| 004 | Confirmation guard against accidental rescans | medium | open | — |
+| 005 | Wire up the `photo` and `photocover` projections | high | open | 007 |
+| 006 | Show the cover photo + confirm identity before registering | high | open | 005 |
+| 007 | Complete switch to `jrgensen/stream` + `cqrs`, delete `superfluids` | high | open | — |
+| 008 | Make the event year configurable via `YEAR` | high | **done** | — |
+| 009 | Direct Traefik routing + local JetStream | high | **done** | — |
+| 010 | Ship `webroot` in the prod image | medium | **done** | — |
+| 011 | Manual scan publishes a fabricated QR id | medium | open | — |
+| 012 | Delete dead inherited code | medium | **done** | — |
 
-The decided-but-unimplemented behaviours described above are tracked there. When
-you implement one, work the task file as you go rather than retro-filling it, and
+**007 is the current bottleneck**: `go build ./...` and `go test ./...` fail without
+it, which breaks the `air` dev loop and the production image, and it gates 005 → 006.
+
+When you implement one, work the task file as you go rather than retro-filling it, and
 update the *Known deviations* list here once the deviation is actually gone.
 
 PRD folders (`roadmap/prd/{draft,doing,done}/`) do not exist yet — create them via

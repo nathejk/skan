@@ -38,7 +38,7 @@ decodes it to a zero `User`, trips the `empty user cookie found` check, and
 in a field at 2am gets a blank server error. No cookie should be written unless a
 user was actually resolved.
 
-User-facing text is Danish. Suggested wording, to be corrected by HQ:
+User-facing text is Danish. Wording **approved by HQ**:
 
 - unknown number — "Vi kender ikke det telefonnummer. Tjek at du har skrevet det
   rigtigt, eller kontakt HQ."
@@ -68,3 +68,4 @@ This task blocks 003 (role-split scan page) and 002's crew-grade reasoning.
 - 2026-09-08 00:00 — Task created. Derived from a documentation pass over the repo;
   decision confirmed by HQ (roles gone, phone number is the only identity, both →
   refuse and ring HQ).
+- 2026-09-08 04:30 — HQ approved the drafted Danish wording as written above.
