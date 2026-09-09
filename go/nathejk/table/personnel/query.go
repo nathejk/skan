@@ -49,11 +49,26 @@ func (q *querier) GetAll(ctx context.Context, filter Filter) ([]*Person, error) 
 	return personnel, nil
 }
 
-func (q *querier) GetByPhone(ctx context.Context, phone types.PhoneNumber) (*Person, error) {
+// GetByPhone resolves a phone number to a person within one event year.
+//
+// The year is required. Personnel sign up again every year, so the same number
+// appears in several years' rows: without the filter this returned whichever row
+// MariaDB picked, and a login could be resolved against a past event. It also
+// matters for role resolution — in the live data 12 numbers are crew in one year and
+// senior in another, and treating those as "registered as both" would lock real
+// people out.
+func (q *querier) GetByPhone(ctx context.Context, yearSlug string, phone types.PhoneNumber) (*Person, error) {
+	if yearSlug == "" {
+		return nil, tables.ErrRecordNotFound
+	}
 	var userID types.UserID
-	query := `SELECT userId FROM personnel WHERE phone = ?`
-	args := []any{phone.Normalize()}
-	q.db.QueryRow(query, args...).Scan(&userID)
+	query := `SELECT userId FROM personnel WHERE phone = ? AND year = ?`
+	if err := q.db.QueryRowContext(ctx, query, phone.Normalize(), yearSlug).Scan(&userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, tables.ErrRecordNotFound
+		}
+		return nil, err
+	}
 
 	return q.GetByID(ctx, userID)
 }

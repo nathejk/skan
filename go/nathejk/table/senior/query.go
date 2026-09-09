@@ -20,9 +20,9 @@ func (q *querier) GetAll(ctx context.Context, filters Filter) ([]*Senior, Metada
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	query := `SELECT 
-  s.memberId, 
-  s.teamId, 
+	query := `SELECT
+  s.memberId,
+  s.teamId,
   name,
   address,
   postalCode,
@@ -62,11 +62,23 @@ WHERE  s.teamId = ?`
 	return members, metadata, nil
 }
 
-func (q *querier) GetByPhone(ctx context.Context, phone types.PhoneNumber) (*Senior, error) {
+// GetByPhone resolves a phone number to a senior within one event year.
+//
+// The year is required, for the same reason as in the personnel projection: seniors
+// sign up again each year, so a number matches rows from several events, and a login
+// must be resolved against the event being run.
+func (q *querier) GetByPhone(ctx context.Context, yearSlug string, phone types.PhoneNumber) (*Senior, error) {
+	if yearSlug == "" {
+		return nil, tables.ErrRecordNotFound
+	}
 	var memberID types.MemberID
-	query := `SELECT memberId FROM senior WHERE phone = ?`
-	args := []any{phone.Normalize()}
-	q.db.QueryRow(query, args...).Scan(&memberID)
+	query := `SELECT memberId FROM senior WHERE phone = ? AND year = ?`
+	if err := q.db.QueryRowContext(ctx, query, phone.Normalize(), yearSlug).Scan(&memberID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, tables.ErrRecordNotFound
+		}
+		return nil, err
+	}
 
 	return q.GetByID(ctx, memberID)
 }

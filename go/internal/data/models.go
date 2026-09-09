@@ -31,12 +31,12 @@ type PatruljeInterface interface {
 type SeniorInterface interface {
 	GetAll(context.Context, senior.Filter) ([]*senior.Senior, senior.Metadata, error)
 	GetByID(context.Context, types.MemberID) (*senior.Senior, error)
-	GetByPhone(context.Context, types.PhoneNumber) (*senior.Senior, error)
+	GetByPhone(ctx context.Context, yearSlug string, phone types.PhoneNumber) (*senior.Senior, error)
 }
 type PersonnelInterface interface {
 	GetAll(context.Context, personnel.Filter) ([]*personnel.Person, error)
 	GetByID(context.Context, types.UserID) (*personnel.Person, error)
-	GetByPhone(context.Context, types.PhoneNumber) (*personnel.Person, error)
+	GetByPhone(ctx context.Context, yearSlug string, phone types.PhoneNumber) (*personnel.Person, error)
 }
 type QrInterface interface {
 	GetByID(ctx context.Context, yearSlug string, qrID types.QrID) (*qr.QR, error)

@@ -180,14 +180,17 @@ func (a *App) registrationRefused(w http.ResponseWriter, r *http.Request, messag
 	}
 }
 
-func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
+// renderLogin draws the login page. Passed into the login package as its Renderer so
+// that package stays free of template wiring.
+func (a *App) renderLogin(w http.ResponseWriter, r *http.Request, page login.PageData) {
 	ts, err := template.ParseFS(fs, "templates/base.html", "templates/login.html")
 	if err != nil {
 		http.Error(w, "Internal Server Error (login)", http.StatusInternalServerError)
 		return
 	}
 	data := map[string]any{
-		"path": r.URL.Path,
+		"path":  page.Path,
+		"error": page.Error,
 	}
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -327,7 +330,7 @@ func (a *App) requireExportToken(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (a *App) routes() http.Handler {
-	user := login.New(a.models)
+	user := login.New(a.models, a.config.year, a.renderLogin)
 
 	r := chi.NewRouter()
 	r.Get("/healthcheck", a.HealthcheckHandler)
@@ -335,7 +338,7 @@ func (a *App) routes() http.Handler {
 	// records scans of real QR codes only, so the way in is the sticker on the map.
 	// The page still sits behind Authenticate, because it is where a scanner logs in
 	// before their first scan.
-	r.Get("/", user.Authenticate(a.indexHandler, a.loginHandler))
+	r.Get("/", user.Authenticate(a.indexHandler))
 
 	// Route for about page
 	r.Get("/about", a.aboutHandler)
@@ -344,11 +347,11 @@ func (a *App) routes() http.Handler {
 	r.Post("/login", user.LoginHandler)
 	r.Get("/qr", a.requireExportToken(a.qrHandler))
 	r.Get("/geo", a.requireExportToken(a.geoHandler))
-	r.Get("/qr/{id}/{cs}", user.Authenticate(a.scanHandler, a.loginHandler))
+	r.Get("/qr/{id}/{cs}", user.Authenticate(a.scanHandler))
 	r.Post("/qr/{id}/{cs}", user.LoginHandler)
-	r.Get("/map/{id}/{cs}", user.Authenticate(a.mapHandler, a.loginHandler))
-	r.Post("/map/{id}/{cs}", user.Authenticate(a.doMapHandler, a.loginHandler))
-	r.Put("/register", user.Authenticate(a.registerHandler, a.loginHandler))
+	r.Get("/map/{id}/{cs}", user.Authenticate(a.mapHandler))
+	r.Post("/map/{id}/{cs}", user.Authenticate(a.doMapHandler))
+	r.Put("/register", user.Authenticate(a.registerHandler))
 
 	fileServer := http.FileServer(http.Dir("/webroot/"))
 
