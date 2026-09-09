@@ -186,8 +186,10 @@ docker compose up
 | Redis admin | http://redis.skan.local.nathejk.dk |
 
 Each service registers itself with Traefik directly — there is no gateway container.
-The app is served over HTTPS (HTTP redirects to it) because the scan pages use the
-browser's geolocation API, which only works in a secure context.
+The app is served over **both** HTTP and HTTPS. Use the HTTPS URL: the browser only
+grants geolocation in a secure context, and the printed sticker URLs are `https://`
+for that reason. HTTP is served rather than redirected on purpose — a redirect would
+turn a scan's POST into a bodyless GET and lose it.
 
 The production image is deliberately **not** a compose service, since building it runs
 the full test/lint/vulnerability gate. Build it explicitly:

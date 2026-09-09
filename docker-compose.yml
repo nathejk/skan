@@ -31,30 +31,45 @@ services:
       REDIS_ADDR: redis:6379
       SECRET: nh2025
     labels:
-      traefik.enable: true
+      traefik.enable: "true"
       traefik.docker.network: traefik
-      # Served over HTTPS via a redirect: the scan pages call
-      # navigator.geolocation, which browsers only expose in a secure context,
-      # and *.local.nathejk.dk is not treated as localhost.
+      # The container listens on 80, which is Traefik's default, so this label is not
+      # needed to pick the port. It is here to *name* the service `skan`: both routers
+      # below name their service explicitly, and Traefik's implicit service for this
+      # container is `api-skan`. Without this, both routers fail with
+      # "the service \"skan@docker\" does not exist" and are disabled.
+      traefik.http.services.skan.loadbalancer.server.port: "80"
+
+      # Serve BOTH http and https (org rules pattern 3), rather than redirecting
+      # http to https.
       #
-      # The redirect middleware is declared here, scoped to this repo. There is no
-      # shared `redirect-to-https@docker` on the shared Traefik — referencing one
-      # makes the router fail with "middleware does not exist"; sibling repos
-      # declare their own the same way (e.g. hq-redirect-to-https).
-      traefik.http.middlewares.skan-redirect-to-https.redirectscheme.scheme: https
-      traefik.http.middlewares.skan-redirect-to-https.redirectscheme.permanent: true
+      # The redirect pattern is quietly wrong here. Traefik's redirectscheme answers
+      # 302, and a client following a 302 on a POST turns it into a GET and drops the
+      # body — browsers do this too. Every scan this app records is a form POST or a
+      # PUT: `POST /` (manual team-number entry), `POST /map/{id}/{cs}` (binding a QR
+      # code to a patrulje) and `PUT /register` (the geolocation call). A scan lost to
+      # a redirect is a catch that never happened, with nothing in the logs to suggest
+      # why.
+      #
+      # Serving both is safe here because the printed stickers already carry https:
+      # `qrHandler` generates `https://<host>/qr/<id>/<cs>`, so scanners arrive over
+      # TLS and get a secure context for navigator.geolocation without a redirect.
+      # A page reached over plain http still works, but the browser withholds
+      # geolocation and the scanner falls back to typing a map coordinate.
+      #
+      # Two routers pointing at one service. Both name the service explicitly,
+      # because Traefik cannot infer it when a service has more than one router.
       traefik.http.routers.skan.rule: Host(`skan.local.nathejk.dk`)
       traefik.http.routers.skan.entrypoints: web
-      traefik.http.routers.skan.middlewares: skan-redirect-to-https
       traefik.http.routers.skan.service: skan
+      # A router with any tls setting is HTTPS-only, so the cert resolver must sit on
+      # the websecure router alone. Putting it on the single router is what makes
+      # plain http requests match nothing and collect Traefik's own text/plain 404 —
+      # which looks like skan is down, when skan never saw the request.
       traefik.http.routers.skan-secure.rule: Host(`skan.local.nathejk.dk`)
       traefik.http.routers.skan-secure.entrypoints: websecure
       traefik.http.routers.skan-secure.tls.certresolver: desec
       traefik.http.routers.skan-secure.service: skan
-      # Both routers point at one explicitly-named service. Traefik's implicit
-      # service for this container would be `api-skan`; naming it `skan` keeps it
-      # repo-scoped and consistent with skan-sql / skan-redis below.
-      traefik.http.services.skan.loadbalancer.server.port: 80
     depends_on:
     - mysql
 
@@ -85,10 +100,11 @@ services:
     - local
     - traefik
     labels:
-      traefik.enable: true
+      traefik.enable: "true"
       traefik.docker.network: traefik
       traefik.http.routers.skan-sql.rule: Host(`mysql.skan.local.nathejk.dk`)
-      traefik.http.services.skan-sql.loadbalancer.server.port: 8080
+      # Required: adminer listens on 8080, not Traefik's default 80.
+      traefik.http.services.skan-sql.loadbalancer.server.port: "8080"
     depends_on:
     - mysql
 
@@ -107,7 +123,8 @@ services:
     - local
     - traefik
     labels:
-      traefik.enable: true
+      traefik.enable: "true"
       traefik.docker.network: traefik
       traefik.http.routers.skan-redis.rule: Host(`redis.skan.local.nathejk.dk`)
-      traefik.http.services.skan-redis.loadbalancer.server.port: 8081
+      # Required: redis-commander listens on 8081, not Traefik's default 80.
+      traefik.http.services.skan-redis.loadbalancer.server.port: "8081"

@@ -390,11 +390,25 @@ Flag or fix these deliberately; don't quietly copy the pattern.
 
 - **Compose no longer uses a gateway container.** Each web-exposed service declares
   its own Traefik labels and joins the external `traefik` network (task 009).
-  `api` uses the **HTTPS-redirect** pattern, because the scan pages call
-  `navigator.geolocation`, which browsers only expose in a secure context. Note the
-  redirect middleware is declared **per repo** (`skan-redirect-to-https`): there is
-  no shared `redirect-to-https@docker` on the running Traefik, despite what the
-  org-wide rules say, and referencing one disables the router.
+  `api` **serves both HTTP and HTTPS** (org pattern 3) with the `desec` cert resolver
+  on the `websecure` router only. It deliberately does **not** redirect HTTP→HTTPS:
+  `redirectscheme` answers 302, and a client following a 302 on a POST turns it into a
+  GET and drops the body — which would silently lose a scan, since every scan is a
+  `POST /`, `POST /map/{id}/{cs}` or `PUT /register`. The redirect is unnecessary here
+  anyway, because `qrHandler` prints `https://` sticker URLs, so scanners arrive over
+  TLS and get their secure context for `navigator.geolocation` without one.
+- **A router with any `tls` setting is HTTPS-only.** Keep the cert resolver on the
+  `-secure` router alone; putting it on a single shared router makes plain HTTP match
+  nothing and collect Traefik's own `text/plain` 404, which looks like the app is down.
+- **Both routers must name their service explicitly**, and the service must exist.
+  Traefik's implicit service for this container is `api-skan`, so
+  `traefik.http.services.skan.loadbalancer.server.port: "80"` is present purely to
+  *name* the service `skan` — without it both routers are disabled with
+  `the service "skan@docker" does not exist`.
+- **There is no shared `redirect-to-https@docker` middleware** on the running Traefik,
+  despite what the org-wide rules say. Sibling repos declare their own
+  (`hq-redirect-to-https@docker`). Referencing the shared name disables the router —
+  `tilmelding@docker` is currently broken this way.
 - **The `prod` image is not a compose service.** Building it runs the full
   test/lint/vuln gate with no source mount, so `docker compose up` used to build and
   fail on it. Build it explicitly:

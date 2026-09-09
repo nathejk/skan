@@ -75,3 +75,19 @@ Traefik.
   `go.mod`), so the Go binary never starts. Routing and networking are verified at the
   Traefik/NATS level; the last hop needs task 007. `*.local.nathejk.dk` also does not
   resolve from this agent's sandbox, so browser-level checks are the user's to make.
+- 2026-09-09 07:35 — Revisited after completion, at HQ's request, to align with the
+  `foto` repo's TLS labels. **Switched `api` from HTTPS-redirect to serve-both** (org
+  pattern 3) and deleted the `skan-redirect-to-https` middleware. The redirect was a
+  latent scan-loss bug: `redirectscheme` answers 302, and a client following a 302 on a
+  POST converts it to a GET and drops the body — and every scan this app records is
+  `POST /`, `POST /map/{id}/{cs}` or `PUT /register`. The redirect was also unnecessary
+  for the geolocation argument that motivated it, because `qrHandler` already prints
+  `https://` sticker URLs, so scanners arrive over TLS anyway. Kept the cert resolver on
+  the `websecure` router only, kept both routers naming the service explicitly, and
+  quoted all label values as strings to match the sibling repo.
+- 2026-09-09 07:39 — ✅ Re-verified: `skan@docker` enabled on `web` with no middleware,
+  `skan-secure@docker` enabled on `websecure` with `certResolver: desec`, no Traefik
+  errors in the last 90 seconds. Certificate issuance itself is not verifiable from
+  here: Traefik fetches on first TLS handshake, and `*.local.nathejk.dk` does not
+  resolve from this sandbox — the api container also still refuses connections because
+  its binary cannot build (007).
