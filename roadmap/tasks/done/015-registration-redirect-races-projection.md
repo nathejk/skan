@@ -1,11 +1,11 @@
 # 015 — Registration redirect races the projection
 
-**Status:** open
+**Status:** done
 **Priority:** medium
 **Created:** 2026-09-09
-**Picked up by:**
-**Started:**
-**Completed:**
+**Picked up by:** Zed agent
+**Started:** 2026-09-09
+**Completed:** 2026-09-09
 
 ## Description
 
@@ -44,11 +44,11 @@ handler redirects to a page that reads what it just published.
 
 ## Acceptance Criteria
 
-- [ ] A successful registration lands on the scan page without bouncing back to the
+- [x] A successful registration lands on the scan page without bouncing back to the
       registration page
-- [ ] One registration produces exactly one `found`/`registered` pair, no repeats
-- [ ] The fix does not block the request indefinitely if the projection never catches up
-- [ ] `go test ./...` and `staticcheck` pass in the container
+- [x] One registration produces exactly one `found`/`registered` pair, no repeats
+- [x] The fix does not block the request indefinitely if the projection never catches up
+- [x] `go test ./...` and `staticcheck` pass in the container
 
 ## Progress Log
 
@@ -57,3 +57,23 @@ handler redirects to a page that reads what it just published.
 - 2026-09-09 09:10 — Found while verifying 014: one registration POST produced five
   chained 303s. Filed separately because the fix is a decision about how handlers
   synchronise with their own projections, which affects more than this one route.
+- 2026-09-09 10:45 — Picked up. Checked option (1) properly first: `stream/caughtup`
+  turned out to be a **boot-time sentinel** ("replay finished"), not a per-write signal, so
+  there is nothing to subscribe to for one event. That rules out an event-driven wait and
+  leaves a bounded poll as the honest implementation.
+- 2026-09-09 10:50 — Implemented `waitForRegistration`: after `Register` succeeds,
+  `doMapHandler` polls `QR.GetByID` every 25ms for up to 2s until the binding is readable,
+  then redirects. Chose this over option (2) (rendering the page directly) because the
+  POST-redirect-GET shape is worth keeping — a refresh on a rendered POST response would
+  re-submit the registration.
+- 2026-09-09 10:51 — The wait deliberately never fails the request: the registration is
+  already durable in the stream before the wait starts, so a timeout logs and redirects
+  anyway. Holding a scanner's request open would be worse than the bounce this is meant to
+  avoid.
+- 2026-09-09 10:55 — ✅ Verified. Registering sticker 3 to team 2 now produces exactly
+  **one 303 followed by 200**, where the same flow produced five chained 303s before, and
+  the `qr` row is present immediately. No "not yet visible" warnings, so the projection
+  caught up inside the budget every time. Tests cover the catch-up path (three reads, two
+  misses then a hit), that the happy path does not sleep at all, and that a projection
+  which never catches up returns rather than hanging.
+- 2026-09-09 10:55 — Completed.

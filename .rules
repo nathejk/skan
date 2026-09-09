@@ -437,9 +437,12 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   one second is deduped — a double-submit, not two catches.
 - The geolocation fallback asks for a typed map coordinate and then **discards it**
   (task 016), so such a scan is stored with no position.
-- Consumers still build SQL with `%q`, which is not correct SQL quoting (task 013).
-- Registering a code redirects to a page that reads the projection it just wrote, so a
-  scanner can be bounced back to the registration page (task 015).
+- Consumers quote SQL values with `tables.Quote`/`tables.Datetime` (task 013). **Never
+  use `%q`** — it emits a Go string literal, not a SQL one, and on a `time.Time` it
+  invokes the Stringer and writes ` +0000 UTC` into your column.
+- A handler that publishes an event and then redirects to a page which reads the
+  resulting projection must wait for it to catch up — see `waitForRegistration`
+  (task 015). `stream/caughtup` is a boot sentinel and cannot help with a single write.
 - There is **no per-patrol remark**. `coordinates.html` used to reference `.remark`
   (the PHP app's `noticeText`, shown in red to both roles) but no projection holds such
   a field, so the markup was removed rather than faked. Reintroducing it needs somewhere
@@ -479,12 +482,12 @@ picking up, creating or updating a task.
 | 010 | Ship `webroot` in the prod image | medium | **done** | — |
 | 011 | Manual scanning removed (real QR codes only) | medium | **done** | — |
 | 012 | Delete dead inherited code | medium | **done** | — |
-| 013 | Replace `%q` with correct SQL quoting in consumers | medium | open | — |
+| 013 | Replace `%q` with correct SQL quoting in consumers | medium | **done** | — |
 | 014 | Scope QR ids by year | high | **done** | — |
-| 015 | Registration redirect races the projection | medium | open | — |
+| 015 | Registration redirect races the projection | medium | **done** | — |
 | 016 | Typed map coordinates are discarded | medium | open | — |
 
-**Open: 013, 015, 016.**
+**Open: 016.**
 
 When you implement one, work the task file as you go rather than retro-filling it, and
 update the *Known deviations* list here once the deviation is actually gone.
@@ -517,9 +520,9 @@ the `prd` skill if a change needs a spec first.
   a handler.
 - Legacy consumers build SQL with `fmt.Sprintf("… SET x=%q", …)`; queriers use `?`
   placeholders. **Always use placeholders in reads.** Writes through a
-  `cqrs.Writer` take a finished statement, so they must quote their own values —
-  see `photocover`'s `quote()` helper, and note `%q` is *not* correct for SQL
-  string literals.
+  `cqrs.Writer` take a finished statement, so they must quote their own values — use
+  `tables.Quote` and `tables.Datetime` from `nathejk/table`, and never `%q`, which
+  produces a Go literal rather than a SQL one.
 - Projections are destined for `shared-go`. Keep them free of
   skan-specific imports so they can be lifted without edits.
 - `staticcheck` and `govulncheck` must pass — they gate the production build.

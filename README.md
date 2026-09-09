@@ -274,11 +274,6 @@ Short, honest list — details and more items in `.rules`, tracked as tasks unde
 
 - **The login cookie is unsigned**, so a scanner's identity can be forged. Fine
   for a scouting race, not fine for anything sensitive.
-- **Consumers build SQL with Go's `%q`**, which is not correct SQL quoting; it works
-  on MariaDB today but is fragile for Danish characters and quoting edge cases
-  (task 013).
-- **Registering a code races its own projection**, so a scanner can briefly be
-  bounced back to the page they just completed (task 015).
 - **There is no per-patrol remark.** The old app could show a red note about a patrol;
   no projection holds one, so the markup was removed rather than faked.
 - **A hand-typed map coordinate is discarded.** If the browser won't give a position,

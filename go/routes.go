@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
@@ -165,7 +166,54 @@ func (a *App) doMapHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Wait for the projection to catch up before sending the scanner to a page that
+	// reads it, so they are not bounced back here.
+	if !a.waitForRegistration(r.Context(), qrID) {
+		log.Printf("qr %s registered but not yet visible after %s", qrID, registrationVisibilityBudget)
+	}
 	http.Redirect(w, r, fmt.Sprintf("/qr/%s/%d", qrID, cs), http.StatusSeeOther)
+}
+
+// registrationVisibilityBudget bounds how long doMapHandler waits for the binding it
+// just published to become readable.
+//
+// Short on purpose: it is a courtesy to the next page load, not a correctness
+// mechanism. The registration is already durable in the stream before the wait starts.
+const registrationVisibilityBudget = 2 * time.Second
+
+// waitForRegistration blocks until a freshly published binding is visible in the read
+// model, or the budget runs out.
+//
+// Why this exists: publishing an event and then redirecting to a page that *reads* the
+// resulting projection is a read-after-write against an eventually consistent model. If
+// the projection has not caught up, `scanHandler` sees an unknown code, publishes
+// another `found`, and sends the scanner back to the registration page they just
+// completed — which invites them to register the same code twice, and appends a
+// spurious event to the log every time round.
+//
+// Polling rather than a stream signal: `stream/caughtup` announces "replay finished" at
+// boot, not "this particular write has landed", so there is nothing to subscribe to for
+// a single event. A bounded poll is the honest option, and it is cheap because the happy
+// path returns on the first read.
+//
+// Returning false is not an error: the redirect happens either way. Waiting longer
+// would be worse than a bounce.
+func (a *App) waitForRegistration(ctx context.Context, qrID types.QrID) bool {
+	deadline := time.Now().Add(registrationVisibilityBudget)
+	for {
+		if _, err := a.models.QR.GetByID(ctx, a.config.year, qrID); err == nil {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
 }
 
 // registrationRefused renders a Danish explanation instead of binding the code.

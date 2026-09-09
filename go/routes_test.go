@@ -2,10 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"html/template"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nathejk/shared-go/types"
+	"nathejk.dk/internal/data"
+	tables "nathejk.dk/nathejk/table"
 
 	"nathejk.dk/nathejk/table/patrulje"
 	"nathejk.dk/nathejk/table/qr"
@@ -166,4 +171,71 @@ func TestScanResultRendersWithoutCrewOnlyData(t *testing.T) {
 			}
 		})
 	}
+}
+
+// stubQR reports "not found" a fixed number of times before the row appears, standing
+// in for a projection that has not yet caught up.
+type stubQR struct {
+	notFoundFor int
+	calls       int
+}
+
+func (s *stubQR) GetByID(context.Context, string, types.QrID) (*qr.QR, error) {
+	s.calls++
+	if s.calls <= s.notFoundFor {
+		return nil, tables.ErrRecordNotFound
+	}
+	return &qr.QR{ID: "7"}, nil
+}
+
+func newWaitApp(stub *stubQR) *App {
+	a := &App{models: data.Models{QR: stub}}
+	a.config.year = "2026"
+	return a
+}
+
+func TestWaitForRegistration(t *testing.T) {
+	t.Run("returns once the projection catches up", func(t *testing.T) {
+		stub := &stubQR{notFoundFor: 2}
+		if !newWaitApp(stub).waitForRegistration(context.Background(), "7") {
+			t.Fatal("expected the binding to become visible")
+		}
+		if stub.calls != 3 {
+			t.Fatalf("got %d reads, want 3 (two misses then a hit)", stub.calls)
+		}
+	})
+
+	t.Run("the happy path does not sleep", func(t *testing.T) {
+		stub := &stubQR{}
+		start := time.Now()
+		if !newWaitApp(stub).waitForRegistration(context.Background(), "7") {
+			t.Fatal("expected the binding to be visible immediately")
+		}
+		if elapsed := time.Since(start); elapsed > 10*time.Millisecond {
+			t.Fatalf("waited %s on a read that succeeded first time", elapsed)
+		}
+		if stub.calls != 1 {
+			t.Fatalf("got %d reads, want 1", stub.calls)
+		}
+	})
+
+	t.Run("gives up rather than hanging", func(t *testing.T) {
+		// A projection that never catches up must not hold the request open: the
+		// registration is already durable in the stream, so a bounce beats a hang.
+		stub := &stubQR{notFoundFor: 1 << 30}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		done := make(chan bool, 1)
+		go func() { done <- newWaitApp(stub).waitForRegistration(ctx, "7") }()
+
+		select {
+		case got := <-done:
+			if got {
+				t.Fatal("expected false when the projection never catches up")
+			}
+		case <-time.After(registrationVisibilityBudget + time.Second):
+			t.Fatal("waitForRegistration did not return")
+		}
+	})
 }
