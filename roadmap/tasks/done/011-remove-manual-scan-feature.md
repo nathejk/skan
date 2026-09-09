@@ -1,13 +1,29 @@
-# 011 — Manual scan publishes a fabricated QR id ("x")
+# 011 — Remove the manual-scan feature
 
-**Status:** open
+**Status:** done
 **Priority:** medium
 **Created:** 2026-09-08
-**Picked up by:**
-**Started:**
-**Completed:**
+**Picked up by:** Zed agent
+**Started:** 2026-09-09
+**Completed:** 2026-09-09
 
-## Description
+## Resolution
+
+**HQ decided the feature goes.** This service handles real QR codes only, so there is
+no manual team-number entry and therefore no scan without a code. That dissolves the
+problem rather than choosing between the three options below — no fabricated id, no
+shared-go message type, no primary-key change on `scan` for this reason.
+
+Removed: `doIndexHandler`, the `POST /` route, and `templates/kvito.html` (the receipt
+page it rendered). `templates/index.html` is now a short landing page that says how
+scanning works, still behind `Authenticate` because `/` is where a scanner logs in
+before their first scan.
+
+Note for 004: the `(qrId, uts)` + `INSERT IGNORE` silent-drop still exists for real
+codes — two scans of one code in the same second discard one. That is now 004's problem
+alone.
+
+## Original description
 
 `doIndexHandler` (`POST /`, the manual-entry page where a scanner types a team number
 instead of scanning a sticker) publishes the scan with a **literal QR id of `"x"`**:
@@ -62,12 +78,12 @@ settle the key.
 
 ## Acceptance Criteria
 
-- [ ] Decision recorded in the progress log: (a), (b) or (c)
-- [ ] No fabricated QR id is ever published
-- [ ] Two manual scans of different patrols in the same second are both recorded
-- [ ] A manual scan is attributable to the right team, scanner, time and position
-- [ ] The unknown-team-number path clearly says nothing was recorded, in Danish
-- [ ] `go test ./...` and `staticcheck` pass in the container
+- [x] Decision recorded in the progress log: the feature is removed
+- [x] No fabricated QR id is ever published
+- [x] `POST /` no longer exists
+- [x] The receipt template it rendered is deleted
+- [x] `/` still serves a useful page and is still where a scanner logs in
+- [x] `go test ./...` and `staticcheck` pass in the container
 
 ## Progress Log
 
@@ -77,3 +93,14 @@ settle the key.
   in place, because every available fix either invents a QR id or requires changing the
   `scan` primary key / a shared-go message type — a decision with consequences for race
   data. Options and a recommendation are written up above.
+- 2026-09-09 09:20 — HQ: **manual scans will not be supported — delete the feature.**
+  Only real QR codes are handled by this service. Removed `doIndexHandler`, the
+  `POST /` route and `templates/kvito.html`, and replaced the team-number entry form in
+  `templates/index.html` with a short "scan the sticker on the map" landing page.
+- 2026-09-09 09:25 — ✅ Verified through Traefik: `GET /` logged in renders the new
+  landing page with no number field, `GET /` anonymous still renders the phone-number
+  login form, and `POST /` now returns **405 Method Not Allowed**. Build, `staticcheck`
+  and tests clean.
+- 2026-09-09 09:25 — Completed. Worth noting this shrinks the service's surface in a way
+  that helps 004: the only remaining writer of scans is `PUT /register`, which always has
+  a real QR id.

@@ -45,6 +45,10 @@ stickers.
 Because this endpoint hands out working URLs for codes nobody has seen yet, it is
 guarded by a secret token in the query string rather than by a login.
 
+**There is no way to record a scan without a code.** A manual "type the team number"
+form used to exist and was deliberately removed — this service handles real QR codes
+only.
+
 > Changing the `SECRET` environment variable invalidates every sticker already
 > printed.
 
@@ -161,8 +165,6 @@ endpoints guarded by a secret token in the query string**, not by the phone logi
 The token is a different secret from the QR checksum secret, and it must not be
 handed to bandits — `/geo` is a live map of the whole race.
 
-> Neither endpoint checks a token yet; both are currently public. See *Known gaps*.
-
 - `GET /healthcheck` — liveness probe, open by design
 
 ---
@@ -269,38 +271,26 @@ to Go; those original templates are gone too.
 
 ## Known gaps
 
-Short, honest list — details and more items in `.rules`.
+Short, honest list — details and more items in `.rules`, tracked as tasks under
+`roadmap/tasks/`.
 
-- **Bandit and crew see the same page.** The role follows from the phone number,
-  but the scan result page hardcodes the bandit variant, along with placeholder
-  catch/scan counts — so crew currently get *less* than they should, and both get
-  invented numbers.
-- **`/geo` and `/qr` are wide open** — no login and no token — which breaks the
-  fair-game rule: `/geo` is a live map of every scan in the race, and `/qr?n=N`
-  hands out working sticker URLs for codes that haven't been distributed yet.
-- **The build is currently broken.** The `photo`/`photocover` packages import a
-  module that isn't in `go.mod`, so `go build ./...` and `go test ./...` fail —
-  which also stops the `air` dev loop from rebuilding and breaks the production
-  image build. Task 005/007 resolve it, and it is the current bottleneck.
-- **Manual scans (`POST /`) publish a fabricated QR id `"x"`**, so they all share one
-  primary key space and two in the same second silently drop one (task 011).
-- **Every patrol shows the same stock photo.** Both the scan page and the
-  registration confirmation hardcode `/groupphoto.jpg`, so the "is this the right
-  patrol?" confirmation currently confirms nothing. The `photo` and `photocover`
-  projections that would fix it are copied in but not wired up.
-- **Nothing guards against accidental rescans**; the 30-minute confirmation isn't
-  built.
-- **A phone number registered as both crew and senior logs in as crew.** It
-  should be refused with a "contact HQ" message instead.
+- **Bandit and crew see the same page.** The scan result page hardcodes the bandit
+  variant, along with placeholder catch/scan counts — so crew currently get *less*
+  than they should, and both get invented numbers (tasks 001, 003).
+- **A phone number registered as both crew and senior logs in as crew.** It should
+  be refused with a "contact HQ" message instead (task 001).
 - **An unknown phone number returns a 500** rather than a "we don't know that
-  number" message.
+  number" message (task 001).
+- **Nothing guards against accidental rescans**; the 30-minute confirmation isn't
+  built. Related: two scans of one code in the *same second* are silently discarded,
+  because the `scan` table is keyed `(qrId, uts)` with `INSERT IGNORE` (task 004).
 - **The login cookie is unsigned**, so a scanner's identity can be forged. Fine
   for a scouting race, not fine for anything sensitive.
-- **The production image doesn't ship `webroot/`**, so static assets (including
-  the fallback group photo) are missing there.
-- **The event year is hardcoded** to `2025` in the code.
-- The dev stack still uses an old gateway container instead of the standard
-  per-service Traefik routing used elsewhere in the org.
+- **Consumers build SQL with Go's `%q`**, which is not correct SQL quoting; it works
+  on MariaDB today but is fragile for Danish characters and quoting edge cases
+  (task 013).
+- **Registering a code races its own projection**, so a scanner can briefly be
+  bounced back to the page they just completed (task 015).
 
 ---
 

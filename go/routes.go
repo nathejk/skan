@@ -86,38 +86,6 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonstr)
 }
-func (a *App) doIndexHandler(w http.ResponseWriter, r *http.Request) {
-	teamNumber, _ := strconv.Atoi(r.FormValue("number"))
-	team, _ := a.models.Patrulje.GetByNumber(r.Context(), a.config.year, teamNumber)
-
-	user, err := login.UserFromRequest(r)
-	if user == nil {
-		http.Error(w, fmt.Sprintf("No user %#v", err), http.StatusForbidden)
-		return
-	}
-	if team != nil {
-		if err := a.commands.QR.Scan("x", *team, *user, r.FormValue("latitude"), r.FormValue("longitude")); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}
-
-	ts, err := template.ParseFS(fs, "templates/base.html", "templates/kvito.html")
-	if err != nil {
-		http.Error(w, "Internal Server Error (index)", http.StatusInternalServerError)
-		return
-	}
-	data := map[string]any{
-		"team":  team,
-		"found": false,
-	}
-	if team != nil {
-		data["found"] = true
-		data["armNumber"] = fmt.Sprintf("%s-%d", team.TeamNumber, team.MemberCount)
-	}
-	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
 
 func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 	ts, err := template.ParseFS(fs, "templates/base.html", "templates/map.html")
@@ -363,9 +331,11 @@ func (a *App) routes() http.Handler {
 
 	r := chi.NewRouter()
 	r.Get("/healthcheck", a.HealthcheckHandler)
-	// Route for index page
+	// Route for the landing page. There is no team-number entry form: this service
+	// records scans of real QR codes only, so the way in is the sticker on the map.
+	// The page still sits behind Authenticate, because it is where a scanner logs in
+	// before their first scan.
 	r.Get("/", user.Authenticate(a.indexHandler, a.loginHandler))
-	r.Post("/", a.doIndexHandler)
 
 	// Route for about page
 	r.Get("/about", a.aboutHandler)

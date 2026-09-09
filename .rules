@@ -127,10 +127,14 @@ prefer the `.` form in new code.
 
 ### Request flow
 
+**There is no manual scanning.** This service records scans of real QR codes only. A
+team-number entry form (`POST /`) used to exist and was **deliberately removed**
+(task 011) — do not reintroduce a way to record a scan without a code. The only writer
+of scans is `PUT /register`, which always has a real QR id.
+
 | Route | Purpose |
 |---|---|
-| `GET /` | Manual entry page (type a team number instead of scanning) |
-| `POST /` | Records a scan from the manual page |
+| `GET /` | Landing page — says how scanning works, and is where a scanner logs in |
 | `GET /qr/{id}/{cs}` | **Scan landing page.** Unknown code → publishes `found`, redirects to `/map/…`. Known code → renders the confirmation/geolocation page |
 | `POST /qr/{id}/{cs}` | Login form target for the scan page |
 | `GET /map/{id}/{cs}` | Registration page — asks for / confirms the team number |
@@ -436,10 +440,6 @@ Flag or fix these deliberately; don't quietly copy the pattern.
 - `coordinates.html` references `.remark`, which no handler supplies — comparing
   a missing map key with `""` is a template execution error. It is a free-text
   note about the patrol, carried over from the PHP app's `noticeText`.
-- `doIndexHandler` (`POST /`) publishes a scan with the literal QR id `"x"`, so all
-  manual scans share one `(qrId, uts)` key space and collide within a second
-  (task 011 — needs a decision, since every fix touches either the key or a
-  shared-go message type).
 - The year slug used by the projections' `year` **column** is a separate concern
   from `YEAR`: a projection must take it from the message subject, so a replay of an
   older year is not relabelled with the current one. `scan` has the column but never
@@ -474,7 +474,7 @@ picking up, creating or updating a task.
 | 008 | Make the event year configurable via `YEAR` | high | **done** | — |
 | 009 | Direct Traefik routing + local JetStream | high | **done** | — |
 | 010 | Ship `webroot` in the prod image | medium | **done** | — |
-| 011 | Manual scan publishes a fabricated QR id | medium | open | — |
+| 011 | Manual scanning removed (real QR codes only) | medium | **done** | — |
 | 012 | Delete dead inherited code | medium | **done** | — |
 
 **007 is the current bottleneck**: `go build ./...` and `go test ./...` fail without
