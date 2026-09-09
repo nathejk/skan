@@ -1,9 +1,11 @@
 {{define "title"}}Nathejk{{end}}
 
 {{define "content"}}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-#main .working, #main .success, #main.working .error, #main.success .error  { display:none; } 
-#main.working .working, #main.success .success { display:block; }
+#main .working, #main .success, #main .picker, #main.working .error, #main.success .error, #main.picking .error { display:none; }
+#main.working .working, #main.success .success, #main.picking .picker { display:block; }
+#map { height: 60vh; min-height: 260px; margin: 10px 0; border-radius: 4px; }
 </style>
 <main id="main">
     <div class="error starter-template">
@@ -12,6 +14,17 @@
     <div class="working starter-template">
         <h1>Finder position</h1>
         <i class="icon-spinner icon-spin icon-5x"></i>
+    </div>
+
+    <div class="picker">
+        <h1>Hvor er I?</h1>
+        <p class="lead">Din telefon kunne ikke finde positionen. Zoom ind og sæt en
+        markør, hvor I står.</p>
+        <div id="map"></div>
+        <button id="savePosition" class="btn btn-primary btn-lg btn-block" disabled>
+            Gem position og registrér scanning
+        </button>
+        <p><small>Positionen bliver gemt som manuelt sat.</small></p>
     </div>
 
       <div class="success starter-template">
@@ -45,7 +58,10 @@
         {{ end }}
       </div>
     </main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="text/javascript">
+const main = document.getElementById('main')
+
 // Send the scan. On 409 the server is asking whether a quick repeat should count:
 // re-send once with confirm set if the scanner says yes. The decision is the
 // server's -- this only relays the question.
@@ -71,40 +87,77 @@ async function put(data, confirmed) {
             return put(data, true)
         }
         // Declined: nothing was recorded, and the page says so.
-        document.getElementById('main').className = ''
+        main.className = ''
         return
     }
 
-    document.getElementById('main').className = response.ok ? 'success' : ''
+    main.className = response.ok ? 'success' : ''
 }
 
-function register(data) {
-     put(data, false)
+function register(data) { put(data, false) }
+
+function getLocation(pos) {
+    register({
+        latitude: pos.coords.latitude.toString(),
+        longitude: pos.coords.longitude.toString(),
+    })
 }
-  function getLocation(pos)
-  {
-      register({
-    latitude: pos.coords.latitude.toString(),
-    longitude: pos.coords.longitude.toString(),
-      })
-    //location.href = '?location=' + latitde + ':' + longitude;
-  }
-  function unknownLocation()
-  {
-        var coor = prompt('Indtast dit kortkoordinat:');
-        if (coor) {
-            //location.href = '?location=' + coor;
-            register({prompt: coor})
+
+// The fallback when the browser will not give a position: show a map and let the
+// scanner place a marker. Recorded as manual, because a hand-placed marker is only as
+// good as the scanner's sense of where they are.
+//
+// Opens on the patrol's last known position where there is one, so nobody has to pan
+// across the country in the dark; otherwise on a wide view.
+function pickOnMap() {
+    main.className = 'picking'
+
+    const lastLat = parseFloat('{{ .lastLatitude }}')
+    const lastLng = parseFloat('{{ .lastLongitude }}')
+    const haveLast = !isNaN(lastLat) && !isNaN(lastLng)
+
+    const map = L.map('map').setView(
+        haveLast ? [lastLat, lastLng] : [56.0, 9.5],
+        haveLast ? 14 : 7
+    )
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map)
+
+    const button = document.getElementById('savePosition')
+    let marker = null
+
+    map.on('click', function (e) {
+        if (marker) {
+            marker.setLatLng(e.latlng)
         } else {
-            document.getElementById('main').className = ''
-            //alert('du mangler at opgive koordinat, din fangst er ikke registreret');
+            marker = L.marker(e.latlng, {draggable: true}).addTo(map)
         }
-  }
-document.getElementById('main').className = 'working'
+        button.disabled = false
+    })
+
+    button.addEventListener('click', function () {
+        if (!marker) { return }
+        button.disabled = true
+        main.className = 'working'
+        const at = marker.getLatLng()
+        register({
+            latitude: at.lat.toString(),
+            longitude: at.lng.toString(),
+            manual: true,
+        })
+    })
+
+    // Leaflet needs a size once the container is visible.
+    setTimeout(function () { map.invalidateSize() }, 0)
+}
+
+main.className = 'working'
 if (navigator && navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(getLocation, unknownLocation);
+  navigator.geolocation.getCurrentPosition(getLocation, pickOnMap)
 } else {
-  unknownLocation();
+  pickOnMap()
 }
 </script>
 {{end}}

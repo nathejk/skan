@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS scan (
     uts INT NOT NULL DEFAULT 0,
     latitude VARCHAR(99) NOT NULL,
     longitude VARCHAR(99) NOT NULL,
+    -- How the position was obtained: "gps", "manual", or "" for scans recorded before
+    -- this was tracked. A hand-placed marker is only as good as the scanner's sense of
+    -- where they stood, so anything reading these positions back needs to be able to
+    -- tell them apart -- and "" must not be read as GPS.
+    locationSource VARCHAR(9) NOT NULL DEFAULT "",
     KEY year_teamId (year, teamId, uts),
     KEY year_scannerId (year, scannerId, uts),
     -- scannerId is part of the key, not just qrId and uts.

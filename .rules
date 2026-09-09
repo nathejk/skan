@@ -435,8 +435,11 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   within 30 minutes gets a confirmation prompt via a `409` from `PUT /register`. The
   `scan` primary key is `(qrId, uts, scannerId)`, so only the *same* scanner twice in
   one second is deduped — a double-submit, not two catches.
-- The geolocation fallback asks for a typed map coordinate and then **discards it**
-  (task 016), so such a scan is stored with no position.
+- The geolocation fallback shows a Leaflet map and records the marker with
+  `locationSource=manual` (task 016). Scans from before that field exists carry `""`,
+  which must **not** be read as GPS. The extra field lives in `nathejk/event` as an
+  additive property on the shared body — it should be upstreamed into `shared-go` so hq
+  and the map tooling can rely on it.
 - Consumers quote SQL values with `tables.Quote`/`tables.Datetime` (task 013). **Never
   use `%q`** — it emits a Go string literal, not a SQL one, and on a `time.Time` it
   invokes the Stringer and writes ` +0000 UTC` into your column.
@@ -485,9 +488,10 @@ picking up, creating or updating a task.
 | 013 | Replace `%q` with correct SQL quoting in consumers | medium | **done** | — |
 | 014 | Scope QR ids by year | high | **done** | — |
 | 015 | Registration redirect races the projection | medium | **done** | — |
-| 016 | Typed map coordinates are discarded | medium | open | — |
+| 016 | Map picker replaces the typed-coordinate prompt | medium | **done** | — |
 
-**Open: 016.**
+**Open: none.** Every filed task is done; see *Known deviations* for what remains
+unresolved by choice.
 
 When you implement one, work the task file as you go rather than retro-filling it, and
 update the *Known deviations* list here once the deviation is actually gone.

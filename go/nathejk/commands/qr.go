@@ -7,6 +7,7 @@ import (
 	"github.com/nathejk/shared-go/messages"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/login"
+	"nathejk.dk/nathejk/event"
 	"nathejk.dk/nathejk/table/patrulje"
 )
 
@@ -54,16 +55,17 @@ func (c *qr) Register(qrID types.QrID, team patrulje.Patrulje, scanner login.Use
 
 	return c.p.Publish(msg)
 }
-func (c *qr) Scan(qrID types.QrID, team patrulje.Patrulje, scanner login.User, latitude string, longitude string) error {
-	body := &messages.NathejkQrScanned{
-		QrID:         qrID,
-		TeamID:       team.TeamID,
-		TeamNumber:   team.TeamNumber,
-		ScannerID:    string(scanner.ID),
-		ScannerPhone: scanner.Phone,
+func (c *qr) Scan(qrID types.QrID, team patrulje.Patrulje, scanner login.User, pos event.Position) error {
+	body := &event.QrScanned{
+		LocationSource: pos.Source(),
 	}
-	body.Location.Latitude = latitude
-	body.Location.Longitude = longitude
+	body.QrID = qrID
+	body.TeamID = team.TeamID
+	body.TeamNumber = team.TeamNumber
+	body.ScannerID = string(scanner.ID)
+	body.ScannerPhone = scanner.Phone
+	body.Location.Latitude = pos.Latitude
+	body.Location.Longitude = pos.Longitude
 
 	msg := c.p.MessageFunc()(cqrs.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.qr.%s.scanned", c.yearSlug, qrID)))
 	msg.SetBody(body)

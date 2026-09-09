@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/login"
+	"nathejk.dk/nathejk/event"
 	tables "nathejk.dk/nathejk/table"
 	"nathejk.dk/nathejk/table/patrulje"
 	"nathejk.dk/nathejk/table/qr"
@@ -47,6 +48,10 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 		Latitude   string `json:"lat"`
 		Longitude  string `json:"lng"`
 		Scanner    string `json:"scanner"`
+		// Source is "gps", "manual", or "" for scans predating the distinction. Exported
+		// because a hand-placed marker and a GPS fix are different qualities of fact, and
+		// whoever draws the map should be able to tell which is which.
+		Source string `json:"position"`
 	}
 	scans, _ := a.models.Scan.GetAll(r.Context(), scan.Filter{})
 	geo := []row{}
@@ -84,6 +89,7 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 			Scanner:    data["scanner"],
 			Lok:        data["lok"],
 			Role:       data["role"],
+			Source:     s.LocationSource,
 		})
 	}
 	jsonstr, _ := json.Marshal(geo)
@@ -328,6 +334,17 @@ func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 		a.coverPhotoThumbURL(r.Context(), patrulje.TeamID),
 		user.IsBandit(), catchCount, scanCount,
 	)
+
+	// Where to open the map if the browser refuses a position: the patrol's last known
+	// place, so the scanner starts near where they are rather than panning across
+	// Denmark in the dark. Empty when the patrol has never been scanned with a
+	// position, and the template then opens on a wide view.
+	if latest, err := a.models.Scan.LatestByTeam(r.Context(), patrulje.TeamID); err == nil &&
+		latest.Latitude != "" && latest.Longitude != "" {
+		data["lastLatitude"] = latest.Latitude
+		data["lastLongitude"] = latest.Longitude
+	}
+
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -398,9 +415,12 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 	type input struct {
 		QrID       types.QrID `json:"qrId"`
 		TeamNumber int        `json:"teamNumber"`
-		Prompt     string     `json:"prompt"`
 		Latitude   string     `json:"latitude"`
 		Longitude  string     `json:"longitude"`
+		// Manual is set when the scanner placed the marker themselves, because the
+		// browser would not supply a position. Recorded with the scan: a hand-placed
+		// marker is a different quality of fact from a GPS fix.
+		Manual bool `json:"manual"`
 		// Confirm is the scanner answering "yes, count this as a new scan" after being
 		// asked. The page re-sends the same request with this set.
 		Confirm bool `json:"confirm"`
@@ -442,7 +462,12 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := a.commands.QR.Scan(in.QrID, *patrulje, *user, in.Latitude, in.Longitude); err != nil {
+	pos := event.Position{
+		Latitude:  in.Latitude,
+		Longitude: in.Longitude,
+		Manual:    in.Manual,
+	}
+	if err := a.commands.QR.Scan(in.QrID, *patrulje, *user, pos); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

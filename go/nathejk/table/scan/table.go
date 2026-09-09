@@ -19,6 +19,10 @@ type Scan struct {
 	Uts          int64        `json:"uts"`
 	Latitude     string       `json:"latitude"`
 	Longitude    string       `json:"longitude"`
+
+	// LocationSource is "gps", "manual", or "" for scans recorded before it was
+	// tracked. Empty must not be presented as GPS.
+	LocationSource string `json:"locationSource,omitempty"`
 }
 
 type table struct {

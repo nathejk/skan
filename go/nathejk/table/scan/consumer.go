@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/jrgensen/cqrs"
-	"github.com/nathejk/shared-go/messages"
+	"nathejk.dk/nathejk/event"
 	tables "nathejk.dk/nathejk/table"
 )
 
@@ -22,7 +22,7 @@ func (c *consumer) Consumes() []cqrs.Subject {
 func (c *consumer) HandleMessage(msg cqrs.Message) error {
 	switch true {
 	case msg.Subject().Match("NATHEJK.*.qr.*.scanned"):
-		var body messages.NathejkQrScanned
+		var body event.QrScanned
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
@@ -35,7 +35,8 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		}
 		sql := fmt.Sprintf(
 			"INSERT IGNORE INTO scan SET year=%s, qrId=%s, teamId=%s, teamNumber=%s, "+
-				"scannerId=%s, scannerPhone=%s, uts=%d, latitude=%s, longitude=%s",
+				"scannerId=%s, scannerPhone=%s, uts=%d, latitude=%s, longitude=%s, "+
+				"locationSource=%s",
 			tables.Quote(parts[1]),
 			tables.Quote(string(body.QrID)),
 			tables.Quote(string(body.TeamID)),
@@ -45,6 +46,7 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 			msg.Time().Unix(),
 			tables.Quote(body.Location.Latitude),
 			tables.Quote(body.Location.Longitude),
+			tables.Quote(body.LocationSource),
 		)
 		if err := c.w.Consume(sql); err != nil {
 			return err

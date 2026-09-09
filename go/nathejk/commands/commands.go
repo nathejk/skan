@@ -4,6 +4,7 @@ import (
 	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/login"
+	"nathejk.dk/nathejk/event"
 	"nathejk.dk/nathejk/table/patrulje"
 )
 
@@ -11,7 +12,7 @@ type Commands struct {
 	QR interface {
 		Found(qrID types.QrID, scanner login.User) error
 		Register(qrID types.QrID, team patrulje.Patrulje, scanner login.User) error
-		Scan(qrID types.QrID, team patrulje.Patrulje, scanner login.User, latitude string, longitude string) error
+		Scan(qrID types.QrID, team patrulje.Patrulje, scanner login.User, pos event.Position) error
 	}
 }
 

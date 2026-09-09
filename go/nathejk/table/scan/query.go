@@ -19,7 +19,7 @@ func (q *querier) GetAll(ctx context.Context, filters Filter) ([]*Scan, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	query := `SELECT qrId, teamId, teamNumber, scannerId, scannerPhone, uts, latitude, longitude
+	query := `SELECT qrId, teamId, teamNumber, scannerId, scannerPhone, uts, latitude, longitude, locationSource
 		FROM scan
 		WHERE (LOWER(year) = LOWER(?) OR ? = '')`
 	args := []any{filters.YearSlug, filters.YearSlug}
@@ -33,7 +33,7 @@ func (q *querier) GetAll(ctx context.Context, filters Filter) ([]*Scan, error) {
 	scans := []*Scan{}
 	for rows.Next() {
 		var r Scan
-		if err := rows.Scan(&r.QrID, &r.TeamID, &r.TeamNumber, &r.ScannerID, &r.ScannerPhone, &r.Uts, &r.Latitude, &r.Longitude); err != nil {
+		if err := rows.Scan(&r.QrID, &r.TeamID, &r.TeamNumber, &r.ScannerID, &r.ScannerPhone, &r.Uts, &r.Latitude, &r.Longitude, &r.LocationSource); err != nil {
 			return nil, err
 		}
 		scans = append(scans, &r)
@@ -61,7 +61,7 @@ func (q *querier) LatestByTeam(ctx context.Context, teamID types.TeamID) (*Scan,
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	const query = `SELECT qrId, teamId, teamNumber, scannerId, scannerPhone, uts, latitude, longitude
+	const query = `SELECT qrId, teamId, teamNumber, scannerId, scannerPhone, uts, latitude, longitude, locationSource
 		FROM scan
 		WHERE teamId = ?
 		ORDER BY uts DESC
@@ -70,7 +70,7 @@ func (q *querier) LatestByTeam(ctx context.Context, teamID types.TeamID) (*Scan,
 	var r Scan
 	err := q.db.QueryRowContext(ctx, query, teamID).Scan(
 		&r.QrID, &r.TeamID, &r.TeamNumber, &r.ScannerID, &r.ScannerPhone,
-		&r.Uts, &r.Latitude, &r.Longitude,
+		&r.Uts, &r.Latitude, &r.Longitude, &r.LocationSource,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
