@@ -25,6 +25,7 @@ services:
     environment:
       #GO_BUILD_FLAGS: -race
       YEAR: 2026
+      FOTO_BASE_URL: https://foto.local.nathejk.dk
       JETSTREAM_DSN: "nats://jetstream:4222"
       DB_DSN: root:ib@tcp(mysql:3306)/skan?parseTime=true
       SMS_DSN: cpsms://TOKEN@api.cpsms.dk

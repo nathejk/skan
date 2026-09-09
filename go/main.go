@@ -19,6 +19,8 @@ import (
 	"nathejk.dk/nathejk/table/klan"
 	"nathejk.dk/nathejk/table/patrulje"
 	"nathejk.dk/nathejk/table/personnel"
+	"nathejk.dk/nathejk/table/photo"
+	"nathejk.dk/nathejk/table/photocover"
 	"nathejk.dk/nathejk/table/qr"
 	"nathejk.dk/nathejk/table/scan"
 	"nathejk.dk/nathejk/table/senior"
@@ -75,12 +77,21 @@ func main() {
 	qrtable := qr.New(sqlw, db.DB())
 	scantable := scan.New(sqlw, db.DB())
 
+	// Photographs. Both are constructed with a **nil publisher**: this service only
+	// ever reads them. `photo` is owned by the foto service, and choosing a cover is
+	// an organizer's job in hq — a scanner must not be able to publish either.
+	phototable, err := photo.New(nil, sqlw, db.DB())
+	if err != nil {
+		logger.PrintFatal(err, nil)
+	}
+	photocovertable := photocover.New(nil, sqlw, db.DB())
+
 	// Every schema exists from here on, so failures become recoverable rather than
 	// fatal.
 	sqlw.Arm()
 
 	mux := xstream.NewMux(js)
-	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable)
+	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable, phototable, photocovertable)
 	if err := mux.Run(ctx); err != nil {
 		logger.PrintFatal(err, nil)
 	}
@@ -90,12 +101,14 @@ func main() {
 	}
 
 	app.models = data.Models{
-		Klan:      klantable,
-		Senior:    seniortable,
-		Patrulje:  patruljetable,
-		Personnel: personneltable,
-		QR:        qrtable,
-		Scan:      scantable,
+		Klan:       klantable,
+		Senior:     seniortable,
+		Patrulje:   patruljetable,
+		Personnel:  personneltable,
+		QR:         qrtable,
+		Scan:       scantable,
+		Photo:      phototable,
+		PhotoCover: photocovertable,
 	}
 	app.commands = commands.New(js, app.config.year)
 

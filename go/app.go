@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
@@ -29,7 +30,12 @@ type config struct {
 	// plausible-but-wrong year fails silently (reads simply find nothing), so an
 	// unset YEAR must stop the process instead.
 	year string
-	db   struct {
+	// fotoBaseURL is where the foto service serves photograph bytes; a ref renders
+	// as <fotoBaseURL>/photos/<ref>. No default, and never a hardcoded host: a
+	// patrulje cannot start the race without a photograph, so a wrong base URL
+	// means every registration refuses.
+	fotoBaseURL string
+	db          struct {
 		dsn          string
 		maxOpenConns int
 		maxIdleConns int
@@ -57,6 +63,7 @@ func (a *App) configure() {
 	flag.StringVar(&cfg.server.webroot, "webroot", getEnv("WEBROOT", "/www"), "Static web root")
 
 	flag.StringVar(&cfg.year, "year", os.Getenv("YEAR"), "Event year slug, e.g. 2026 (required)")
+	flag.StringVar(&cfg.fotoBaseURL, "foto-base-url", os.Getenv("FOTO_BASE_URL"), "Base URL of the foto service, e.g. https://foto.local.nathejk.dk (required)")
 
 	flag.StringVar(&cfg.jetstream.dsn, "jetstream-dsn", os.Getenv("JETSTREAM_DSN"), "NATS Streaming DSN")
 
@@ -69,6 +76,10 @@ func (a *App) configure() {
 	if cfg.year == "" {
 		log.Fatal("YEAR is required: set it to the event year slug, e.g. YEAR=2026")
 	}
+	if cfg.fotoBaseURL == "" {
+		log.Fatal("FOTO_BASE_URL is required: set it to the foto service base URL, e.g. FOTO_BASE_URL=https://foto.local.nathejk.dk")
+	}
+	cfg.fotoBaseURL = strings.TrimSuffix(cfg.fotoBaseURL, "/")
 
 	a.config = cfg
 }
