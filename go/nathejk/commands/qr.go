@@ -3,21 +3,21 @@ package commands
 import (
 	"fmt"
 
+	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/login"
 	"nathejk.dk/nathejk/table/patrulje"
-	"nathejk.dk/superfluids/streaminterface"
 )
 
 type qr struct {
-	p streaminterface.Publisher
+	p cqrs.Publisher
 
 	producerSlug string
 	yearSlug     string
 }
 
-func NewQR(p streaminterface.Publisher, yearSlug string) *qr {
+func NewQR(p cqrs.Publisher, yearSlug string) *qr {
 	return &qr{
 		p: p,
 
@@ -32,7 +32,7 @@ func (c *qr) Found(qrID types.QrID, scanner login.User) error {
 		ScannerID:    string(scanner.ID),
 		ScannerPhone: scanner.Phone.Normalize(),
 	}
-	msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.qr.%s.found", c.yearSlug, qrID)))
+	msg := c.p.MessageFunc()(cqrs.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.qr.%s.found", c.yearSlug, qrID)))
 	msg.SetBody(body)
 	meta := messages.Metadata{Producer: c.producerSlug}
 	msg.SetMeta(&meta)
@@ -47,7 +47,7 @@ func (c *qr) Register(qrID types.QrID, team patrulje.Patrulje, scanner login.Use
 		ScannerID:    string(scanner.ID),
 		ScannerPhone: scanner.Phone,
 	}
-	msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.qr.%s.registered", c.yearSlug, qrID)))
+	msg := c.p.MessageFunc()(cqrs.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.qr.%s.registered", c.yearSlug, qrID)))
 	msg.SetBody(body)
 	meta := messages.Metadata{Producer: c.producerSlug}
 	msg.SetMeta(&meta)
@@ -65,7 +65,7 @@ func (c *qr) Scan(qrID types.QrID, team patrulje.Patrulje, scanner login.User, l
 	body.Location.Latitude = latitude
 	body.Location.Longitude = longitude
 
-	msg := c.p.MessageFunc()(streaminterface.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.qr.%s.scanned", c.yearSlug, qrID)))
+	msg := c.p.MessageFunc()(cqrs.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.qr.%s.scanned", c.yearSlug, qrID)))
 	msg.SetBody(body)
 	meta := messages.Metadata{Producer: c.producerSlug}
 	msg.SetMeta(&meta)

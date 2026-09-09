@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"log"
 
+	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/types"
-	"nathejk.dk/pkg/tablerow"
 
 	_ "embed"
 )
@@ -34,7 +34,7 @@ type table struct {
 	querier
 }
 
-func New(w tablerow.Consumer, r *sql.DB) *table {
+func New(w cqrs.Writer, r *sql.DB) *table {
 	table := &table{consumer: consumer{w: w}, querier: querier{db: r}}
 	if err := w.Consume(table.CreateTableSql()); err != nil {
 		log.Fatalf("Error creating table %q", err)

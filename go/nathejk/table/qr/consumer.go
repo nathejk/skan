@@ -4,22 +4,21 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
-	"nathejk.dk/pkg/tablerow"
-	"nathejk.dk/superfluids/streaminterface"
 )
 
 type consumer struct {
-	w tablerow.Consumer
+	w cqrs.Writer
 }
 
-func (c *consumer) Consumes() []streaminterface.Subject {
-	return []streaminterface.Subject{
-		streaminterface.SubjectFromStr("NATHEJK.*.qr.*.registered"),
+func (c *consumer) Consumes() []cqrs.Subject {
+	return []cqrs.Subject{
+		cqrs.SubjectFromStr("NATHEJK.*.qr.*.registered"),
 	}
 }
 
-func (c *consumer) HandleMessage(msg streaminterface.Message) error {
+func (c *consumer) HandleMessage(msg cqrs.Message) error {
 	switch true {
 	case msg.Subject().Match("NATHEJK.*.qr.*.registered"):
 		var body messages.NathejkQrRegistered
@@ -29,7 +28,7 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		sql := "INSERT IGNORE INTO qr SET id=%q, teamNumber=%q, mapCreatedBy=%q, mapCreatedAt=%q"
 		args := []any{body.QrID, body.TeamNumber, body.ScannerID, msg.Time()}
 		if err := c.w.Consume(fmt.Sprintf(sql, args...)); err != nil {
-			log.Fatalf("Error consuming sql %q", err)
+			return err
 		}
 
 	default:

@@ -7,6 +7,10 @@ import (
 	"log"
 	"os"
 
+	"github.com/jrgensen/cqrs/deadletter"
+	"github.com/jrgensen/cqrs/sqlpersister"
+	"github.com/jrgensen/stream/jetstream"
+	"github.com/jrgensen/stream/xstream"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/data"
 	"nathejk.dk/internal/jsonlog"
@@ -18,9 +22,6 @@ import (
 	"nathejk.dk/nathejk/table/qr"
 	"nathejk.dk/nathejk/table/scan"
 	"nathejk.dk/nathejk/table/senior"
-	"nathejk.dk/pkg/sqlpersister"
-	"nathejk.dk/superfluids/jetstream"
-	"nathejk.dk/superfluids/xstream"
 )
 
 // Version gets modified by the ldflags build flag
@@ -48,7 +49,24 @@ func main() {
 	defer db.Close()
 	logger.PrintInfo("Database connected", nil)
 
-	sqlw := sqlpersister.New(db.DB())
+	// The projection writer, wrapped in a dead-letter net.
+	//
+	// deadletter is a transparent pass-through until Arm() is called, so the
+	// CREATE TABLE statements below still fail loudly — a service that cannot build
+	// its schema should not start. After Arm() a statement that the database
+	// rejects is recorded in the deadletter table and the projection loop keeps
+	// going.
+	//
+	// This matters because the read model is rebuilt by replaying the whole log on
+	// every boot: before this, one malformed row anywhere in the history killed the
+	// process on every single start, and the service could never come up again
+	// without someone editing the stream. Losing one row's projection is bad;
+	// losing the service is worse, and the dead-letter table says exactly which row
+	// it was.
+	sqlw := deadletter.New(sqlpersister.New(db.DB()), db.DB())
+	if err := sqlw.Consume(sqlw.CreateTableSql()); err != nil {
+		logger.PrintFatal(err, nil)
+	}
 
 	klantable := klan.New(sqlw, db.DB())
 	seniortable := senior.New(sqlw, db.DB())
@@ -57,10 +75,18 @@ func main() {
 	qrtable := qr.New(sqlw, db.DB())
 	scantable := scan.New(sqlw, db.DB())
 
+	// Every schema exists from here on, so failures become recoverable rather than
+	// fatal.
+	sqlw.Arm()
+
 	mux := xstream.NewMux(js)
 	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable)
 	if err := mux.Run(ctx); err != nil {
 		logger.PrintFatal(err, nil)
+	}
+
+	if n, err := sqlw.Count(); err == nil && n > 0 {
+		logger.PrintInfo(fmt.Sprintf("%d dead-lettered statement(s) during replay — inspect the deadletter table", n), nil)
 	}
 
 	app.models = data.Models{

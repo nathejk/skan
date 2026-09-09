@@ -4,22 +4,24 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
-	"nathejk.dk/pkg/tablerow"
-	"nathejk.dk/superfluids/streaminterface"
 )
 
 type consumer struct {
-	w tablerow.Consumer
+	w cqrs.Writer
+	c int
 }
 
-func (c *consumer) Consumes() []streaminterface.Subject {
-	return []streaminterface.Subject{
-		streaminterface.SubjectFromStr("NATHEJK.*.qr.*.scanned"),
+func (c *consumer) Consumes() []cqrs.Subject {
+	return []cqrs.Subject{
+		cqrs.SubjectFromStr("NATHEJK.*.qr.*.scanned"),
 	}
 }
 
-func (c *consumer) HandleMessage(msg streaminterface.Message) error {
+func (c *consumer) HandleMessage(msg cqrs.Message) error {
+	c.c++
+	log.Printf("Scan count %d", c.c)
 	switch true {
 	case msg.Subject().Match("NATHEJK.*.qr.*.scanned"):
 		var body messages.NathejkQrScanned
@@ -29,7 +31,7 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		sql := "INSERT IGNORE INTO scan SET qrId=%q, teamId=%q, teamNumber=%q, scannerId=%q, scannerPhone=%q, uts=%d, latitude=%q, longitude=%q"
 		args := []any{body.QrID, body.TeamID, body.TeamNumber, body.ScannerID, body.ScannerPhone, msg.Time().Unix(), body.Location.Latitude, body.Location.Longitude}
 		if err := c.w.Consume(fmt.Sprintf(sql, args...)); err != nil {
-			log.Fatalf("Error consuming sql %q", err)
+			return err
 		}
 
 	default:

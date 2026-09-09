@@ -2,7 +2,7 @@
 #
 # Base for build and local development environment
 #
-FROM golang:1.24-alpine AS base
+FROM golang:1.25-alpine AS base
 
 ARG GIT_COMMIT="<unknown>"
 ARG GIT_BRANCH="<unknown>"

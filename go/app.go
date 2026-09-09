@@ -46,7 +46,6 @@ type App struct {
 	Logger  *slog.Logger
 	Session *scs.SessionManager
 	//template  *template.Template
-	//jetstream streaminterface.Stream
 	models   data.Models
 	commands commands.Commands
 }

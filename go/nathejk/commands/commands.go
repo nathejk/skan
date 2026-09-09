@@ -1,10 +1,10 @@
 package commands
 
 import (
+	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/login"
 	"nathejk.dk/nathejk/table/patrulje"
-	"nathejk.dk/superfluids/streaminterface"
 )
 
 type Commands struct {
@@ -15,7 +15,7 @@ type Commands struct {
 	}
 }
 
-func New(stream streaminterface.Publisher, yearSlug string) Commands {
+func New(stream cqrs.Publisher, yearSlug string) Commands {
 	return Commands{
 		QR: NewQR(stream, yearSlug),
 	}

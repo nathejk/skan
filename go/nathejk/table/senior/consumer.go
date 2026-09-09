@@ -4,23 +4,22 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
-	"nathejk.dk/pkg/tablerow"
-	"nathejk.dk/superfluids/streaminterface"
 )
 
 type consumer struct {
-	w tablerow.Consumer
+	w cqrs.Writer
 }
 
-func (c *consumer) Consumes() []streaminterface.Subject {
-	return []streaminterface.Subject{
-		streaminterface.SubjectFromStr("NATHEJK.*.senior.*.updated"),
-		streaminterface.SubjectFromStr("NATHEJK.*.senior.*.deleted"),
+func (c *consumer) Consumes() []cqrs.Subject {
+	return []cqrs.Subject{
+		cqrs.SubjectFromStr("NATHEJK.*.senior.*.updated"),
+		cqrs.SubjectFromStr("NATHEJK.*.senior.*.deleted"),
 	}
 }
 
-func (c *consumer) HandleMessage(msg streaminterface.Message) error {
+func (c *consumer) HandleMessage(msg cqrs.Message) error {
 	switch true {
 	case msg.Subject().Match("nathejk.*.senior.*.updated"):
 		var body messages.NathejkSeniorUpdated
@@ -49,7 +48,7 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 			msg.Time(),
 		}
 		if err := c.w.Consume(fmt.Sprintf(query, args...)); err != nil {
-			log.Fatalf("Error consuming sql %q", err)
+			return err
 		}
 
 	case msg.Subject().Match("nathejk.*.senior.*.deleted"):
@@ -59,9 +58,8 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		}
 		query := "DELETE FROM senior WHERE memberId=%q"
 		args := []any{body.MemberID}
-		err := c.w.Consume(fmt.Sprintf(query, args...))
-		if err != nil {
-			log.Fatalf("Error consuming sql %q", err)
+		if err := c.w.Consume(fmt.Sprintf(query, args...)); err != nil {
+			return err
 		}
 		/*
 			case "monolith:nathejk_member":
@@ -121,7 +119,7 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		}
 		sql := fmt.Sprintf("INSERT IGNORE INTO klan SET teamId=%q, year=%q", body.TeamID, msg.Subject().Parts()[1])
 		if err := c.w.Consume(sql); err != nil {
-			log.Fatalf("Error consuming sql %q", err)
+			return err
 		}
 
 	case msg.Subject().Match("nathejk:patrulje.updated"):
@@ -129,9 +127,8 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
-		err := c.w.Consume(fmt.Sprintf("UPDATE patrulje SET name=%q, groupName=%q, korps=%q, contactName=%q, contactPhone=%q, contactEmail=%q, contactRole=%q WHERE teamId=%q", body.Name, body.GroupName, body.Korps, body.ContactName, body.ContactPhone, body.ContactEmail, body.ContactRole, body.TeamID))
-		if err != nil {
-			log.Fatalf("Error consuming sql %q", err)
+		if err := c.w.Consume(fmt.Sprintf("UPDATE patrulje SET name=%q, groupName=%q, korps=%q, contactName=%q, contactPhone=%q, contactEmail=%q, contactRole=%q WHERE teamId=%q", body.Name, body.GroupName, body.Korps, body.ContactName, body.ContactPhone, body.ContactEmail, body.ContactRole, body.TeamID)); err != nil {
+			return err
 		}
 
 	case msg.Subject().Match("NATHEJK.*.klan.*.status.changed"):
@@ -139,9 +136,8 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
-		err := c.w.Consume(fmt.Sprintf("UPDATE klan SET signupStatus=%q WHERE teamId=%q", body.Status, body.TeamID))
-		if err != nil {
-			log.Fatalf("Error consuming sql %q", err)
+		if err := c.w.Consume(fmt.Sprintf("UPDATE klan SET signupStatus=%q WHERE teamId=%q", body.Status, body.TeamID)); err != nil {
+			return err
 		}
 
 	case msg.Subject().Match("NATHEJK.*.klan.*.updated"):
@@ -156,9 +152,8 @@ func (c *consumer) HandleMessage(msg streaminterface.Message) error {
 		//args := []any{body.TeamID, msg.Time().Year(), body.Name, body.Phone, body.Email}
 		//, body.Name, body.GroupName, body.Korps, body.ContactName, body.ContactPhone, body.ContactEmail, body.ContactRole, body.TeamID))
 
-		err := c.w.Consume(fmt.Sprintf(query, args...))
-		if err != nil {
-			log.Fatalf("Error consuming sql %q", err)
+		if err := c.w.Consume(fmt.Sprintf(query, args...)); err != nil {
+			return err
 		}
 	default:
 		log.Printf("Unhandled message %q", msg.Subject().Subject())
