@@ -69,10 +69,12 @@ named here.
 ### 3. Every later scan is just a scan
 
 Once a code is known, scanning it shows the patrol (name, arm number, photo) and
-records the scan. The page asks the browser for GPS coordinates; if that's refused
-or unavailable, it shows a map instead — zoom in, place a marker, and the position is
-saved and flagged as manually set, so a hand-placed marker is never mistaken for a GPS
-fix.
+records the scan. The page asks the browser for GPS coordinates — keeping the accuracy
+it reports, since a fix under trees can be hundreds of metres out — and if that's
+refused or unavailable, it shows a map instead: zoom in, place a marker, and the
+position is saved and flagged as manually set. A hand-placed marker is never mistaken
+for a GPS fix, and carries no accuracy figure, because there is no measurement behind
+it.
 
 ### 4. Logging in
 
@@ -275,9 +277,9 @@ Short, honest list — details and more items in `.rules`, tracked as tasks unde
 
 - **The login cookie is unsigned**, so a scanner's identity can be forged. Fine
   for a scouting race, not fine for anything sensitive.
-- **The `locationSource` field is skan-local.** It is added additively to the shared
-  scanned-event body and should be upstreamed into `shared-go` so other services can
-  rely on it.
+- **The `locationSource` and `locationAccuracy` fields are skan-local.** They are added
+  additively to the shared scanned-event body and should be upstreamed into `shared-go`
+  so other services can rely on them.
 - **There is no per-patrol remark.** The old app could show a red note about a patrol;
   no projection holds one, so the markup was removed rather than faked.
 

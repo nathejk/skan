@@ -23,6 +23,9 @@ type Scan struct {
 	// LocationSource is "gps", "manual", or "" for scans recorded before it was
 	// tracked. Empty must not be presented as GPS.
 	LocationSource string `json:"locationSource,omitempty"`
+
+	// LocationAccuracy is the radius of confidence in metres, or "" when unknown.
+	LocationAccuracy string `json:"locationAccuracy,omitempty"`
 }
 
 type table struct {

@@ -1,9 +1,10 @@
 // Package event holds this service's own event bodies.
 //
 // It exists for one narrow reason: skan needs to record *how* a scan's position was
-// obtained, and the shared body in github.com/nathejk/shared-go has nowhere to put
-// that. Rather than edit another module from here, the field is added as an additive
-// JSON property alongside the shared fields.
+// obtained and *how good* it is, and the shared body in
+// github.com/nathejk/shared-go has nowhere to put either. Rather than edit another
+// module from here, the fields are added as additive JSON properties alongside the
+// shared ones.
 //
 // Additive is safe in both directions. A consumer decoding into
 // messages.NathejkQrScanned ignores the extra property, and skan decoding an older
@@ -26,6 +27,21 @@ const (
 	LocationSourceManual = "manual"
 )
 
+// NormalizeSource maps a claimed source onto the known set, or "" if it is neither.
+//
+// The value arrives from the browser, so it is an assertion rather than a fact and must
+// not be written through unchecked. "" means "unknown", which is also what scans
+// recorded before this field existed carry — and unknown must never be presented as a
+// GPS fix.
+func NormalizeSource(s string) string {
+	switch s {
+	case LocationSourceGPS, LocationSourceManual:
+		return s
+	default:
+		return ""
+	}
+}
+
 // QrScanned is the shared scanned-event body plus the position's provenance.
 //
 // The shared struct is embedded rather than copied, so its fields stay defined in one
@@ -37,6 +53,11 @@ type QrScanned struct {
 	// existed, which is why it is omitempty: absent and "unknown" are the same thing,
 	// and neither should be reported as GPS.
 	LocationSource string `json:"locationSource,omitempty"`
+
+	// LocationAccuracy is the radius of confidence in metres, as the browser reported
+	// it. Empty when unknown — which includes every hand-placed marker, and every scan
+	// recorded before this field existed.
+	LocationAccuracy string `json:"locationAccuracy,omitempty"`
 }
 
 // Position is a scan's location as a handler knows it.
@@ -44,14 +65,13 @@ type Position struct {
 	Latitude  string
 	Longitude string
 
-	// Manual is true when the scanner placed a marker on a map themselves.
-	Manual bool
-}
+	// Source is how the position was obtained: LocationSourceGPS,
+	// LocationSourceManual, or "" when it is not known.
+	Source string
 
-// Source renders the position's provenance for the event body.
-func (p Position) Source() string {
-	if p.Manual {
-		return LocationSourceManual
-	}
-	return LocationSourceGPS
+	// Accuracy is the radius of confidence in metres, or "" when unknown. A GPS fix in
+	// a forest can be hundreds of metres out, so a position without this is a weaker
+	// claim than it looks — keep it with the coordinates rather than inferring quality
+	// from the source alone.
+	Accuracy string
 }

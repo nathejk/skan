@@ -436,10 +436,15 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   `scan` primary key is `(qrId, uts, scannerId)`, so only the *same* scanner twice in
   one second is deduped — a double-submit, not two catches.
 - The geolocation fallback shows a Leaflet map and records the marker with
-  `locationSource=manual` (task 016). Scans from before that field exists carry `""`,
-  which must **not** be read as GPS. The extra field lives in `nathejk/event` as an
-  additive property on the shared body — it should be upstreamed into `shared-go` so hq
-  and the map tooling can rely on it.
+  `locationSource=manual` (task 016). A GPS fix also records `locationAccuracy` in
+  metres; a hand-placed marker deliberately has none, because there is no measurement
+  behind it. Scans from before these fields exist carry `""`, which must **not** be read
+  as GPS. Both live in `nathejk/event` as additive properties on the shared body — they
+  should be upstreamed into `shared-go` so hq and the map tooling can rely on them.
+- **A client-supplied `source` is a claim, not a fact.** `event.NormalizeSource` maps it
+  onto the known set and anything else to `""`, at the edge *and* again in the consumer,
+  so a replay does not trust what an older publisher put on the stream. Accuracy is
+  parsed to whole metres for the same reason.
 - Consumers quote SQL values with `tables.Quote`/`tables.Datetime` (task 013). **Never
   use `%q`** — it emits a Go string literal, not a SQL one, and on a `time.Time` it
   invokes the Stringer and writes ` +0000 UTC` into your column.

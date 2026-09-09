@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS scan (
     -- where they stood, so anything reading these positions back needs to be able to
     -- tell them apart -- and "" must not be read as GPS.
     locationSource VARCHAR(9) NOT NULL DEFAULT "",
+    -- Radius of confidence in metres as the browser reported it, or "" when unknown
+    -- (every hand-placed marker, and every scan predating this column). A GPS fix in a
+    -- forest can be hundreds of metres out, so a position without this is a weaker
+    -- claim than it appears.
+    locationAccuracy VARCHAR(9) NOT NULL DEFAULT "",
     KEY year_teamId (year, teamId, uts),
     KEY year_scannerId (year, scannerId, uts),
     -- scannerId is part of the key, not just qrId and uts.

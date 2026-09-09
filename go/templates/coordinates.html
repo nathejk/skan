@@ -100,6 +100,10 @@ function getLocation(pos) {
     register({
         latitude: pos.coords.latitude.toString(),
         longitude: pos.coords.longitude.toString(),
+        source: 'gps',
+        // Radius of confidence in metres. A fix under trees can be hundreds of metres
+        // out, so the number is worth keeping alongside the coordinates.
+        accuracy: pos.coords.accuracy != null ? pos.coords.accuracy.toString() : '',
     })
 }
 
@@ -145,7 +149,9 @@ function pickOnMap() {
         register({
             latitude: at.lat.toString(),
             longitude: at.lng.toString(),
-            manual: true,
+            source: 'manual',
+            // No accuracy for a hand-placed marker: there is no measurement behind it,
+            // and inventing a radius would dress up a guess as data.
         })
     })
 

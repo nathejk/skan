@@ -52,6 +52,8 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 		// because a hand-placed marker and a GPS fix are different qualities of fact, and
 		// whoever draws the map should be able to tell which is which.
 		Source string `json:"position"`
+		// Accuracy is the radius of confidence in metres, or "" when unknown.
+		Accuracy string `json:"accuracy"`
 	}
 	scans, _ := a.models.Scan.GetAll(r.Context(), scan.Filter{})
 	geo := []row{}
@@ -90,6 +92,7 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 			Lok:        data["lok"],
 			Role:       data["role"],
 			Source:     s.LocationSource,
+			Accuracy:   s.LocationAccuracy,
 		})
 	}
 	jsonstr, _ := json.Marshal(geo)
@@ -411,16 +414,34 @@ func needsRescanConfirmation(latest *scan.Scan, scannerID string, now time.Time)
 	return elapsed < rescanWindow
 }
 
+// metres sanitises a client-supplied accuracy into a plain number of metres, or "".
+//
+// The browser reports a float, sometimes with a long fractional tail. Rounding to whole
+// metres keeps the column readable and discards precision the figure does not have, and
+// parsing it at all keeps arbitrary strings out of the read model.
+func metres(v string) string {
+	if v == "" {
+		return ""
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || f < 0 {
+		return ""
+	}
+	return strconv.FormatFloat(f, 'f', 0, 64)
+}
+
 func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 	type input struct {
 		QrID       types.QrID `json:"qrId"`
 		TeamNumber int        `json:"teamNumber"`
 		Latitude   string     `json:"latitude"`
 		Longitude  string     `json:"longitude"`
-		// Manual is set when the scanner placed the marker themselves, because the
-		// browser would not supply a position. Recorded with the scan: a hand-placed
-		// marker is a different quality of fact from a GPS fix.
-		Manual bool `json:"manual"`
+		// Source is how the browser says the position was obtained, "gps" or "manual".
+		// Normalised before use — it is a claim from the client, not a fact.
+		Source string `json:"source"`
+		// Accuracy is the radius of confidence in metres, as the geolocation API reported
+		// it. Absent for a hand-placed marker.
+		Accuracy string `json:"accuracy"`
 		// Confirm is the scanner answering "yes, count this as a new scan" after being
 		// asked. The page re-sends the same request with this set.
 		Confirm bool `json:"confirm"`
@@ -465,7 +486,8 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 	pos := event.Position{
 		Latitude:  in.Latitude,
 		Longitude: in.Longitude,
-		Manual:    in.Manual,
+		Source:    event.NormalizeSource(in.Source),
+		Accuracy:  metres(in.Accuracy),
 	}
 	if err := a.commands.QR.Scan(in.QrID, *patrulje, *user, pos); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

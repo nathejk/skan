@@ -103,3 +103,24 @@ worked \u2014 consider telling the scanner their position could not be recorded.
   fallback only triggers when geolocation is refused. The wiring either side of it is
   verified; **someone should tap through it on a phone** before race night, ideally with
   location permission denied.
+- 2026-09-09 11:45 — Follow-up at HQ's request: dropped the `Manual bool` flag from
+  `event.Position` in favour of two explicit properties, `Source` and `Accuracy`.
+  Better shape for two reasons. A boolean could only ever express "GPS or not", whereas a
+  source string leaves room for a third kind of position later without another flag; and
+  accuracy is the figure that actually says how much a position is worth — a 2 km
+  cell-tower fix and a 5 m GPS fix were previously indistinguishable, both simply "gps".
+- 2026-09-09 11:46 — Since `Source` now arrives from the browser rather than being derived
+  server-side, it is a **claim** and is normalised through `event.NormalizeSource`: known
+  values pass, anything else becomes `""`. Normalised twice, at the edge and again in the
+  consumer, so a replay does not trust what an older or buggier publisher wrote to the
+  stream. Accuracy is parsed to whole metres, which keeps junk out of the column and drops
+  precision the figure does not have.
+- 2026-09-09 11:50 — ✅ Verified live: `accuracy:"12.7431"` stores `13`;
+  `source:"satellite"` and `accuracy:"abc"` both store `""` rather than the junk;
+  a manual marker stores `manual` with no accuracy; replayed historical scans keep both
+  empty. `/geo` now exports `position` and `accuracy`. Unit tests cover the rounding, the
+  negative and non-numeric cases, and that an unrecognised source is never promoted to
+  "gps".
+- 2026-09-09 11:51 — Incidental confirmation that 004's key change works: three test
+  scans of one code in the same second by the same scanner collapsed to two rows, exactly
+  the double-submit dedupe that key is meant to provide.

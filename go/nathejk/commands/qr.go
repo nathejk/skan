@@ -57,7 +57,8 @@ func (c *qr) Register(qrID types.QrID, team patrulje.Patrulje, scanner login.Use
 }
 func (c *qr) Scan(qrID types.QrID, team patrulje.Patrulje, scanner login.User, pos event.Position) error {
 	body := &event.QrScanned{
-		LocationSource: pos.Source(),
+		LocationSource:   pos.Source,
+		LocationAccuracy: pos.Accuracy,
 	}
 	body.QrID = qrID
 	body.TeamID = team.TeamID

@@ -36,7 +36,7 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		sql := fmt.Sprintf(
 			"INSERT IGNORE INTO scan SET year=%s, qrId=%s, teamId=%s, teamNumber=%s, "+
 				"scannerId=%s, scannerPhone=%s, uts=%d, latitude=%s, longitude=%s, "+
-				"locationSource=%s",
+				"locationSource=%s, locationAccuracy=%s",
 			tables.Quote(parts[1]),
 			tables.Quote(string(body.QrID)),
 			tables.Quote(string(body.TeamID)),
@@ -46,7 +46,10 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 			msg.Time().Unix(),
 			tables.Quote(body.Location.Latitude),
 			tables.Quote(body.Location.Longitude),
-			tables.Quote(body.LocationSource),
+			// Normalised on the way in as well as at the edge: a replay must not trust a
+			// value an older or buggier publisher put on the stream.
+			tables.Quote(event.NormalizeSource(body.LocationSource)),
+			tables.Quote(body.LocationAccuracy),
 		)
 		if err := c.w.Consume(sql); err != nil {
 			return err

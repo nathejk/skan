@@ -10,6 +10,7 @@ import (
 
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/data"
+	"nathejk.dk/nathejk/event"
 	tables "nathejk.dk/nathejk/table"
 
 	"nathejk.dk/nathejk/table/patrulje"
@@ -238,4 +239,41 @@ func TestWaitForRegistration(t *testing.T) {
 			t.Fatal("waitForRegistration did not return")
 		}
 	})
+}
+
+// TestMetres checks the accuracy value is sanitised rather than trusted.
+//
+// It arrives from the browser as a float with a long fractional tail, and the field is
+// free-form, so anything could be posted. Whole metres is all the figure justifies.
+func TestMetres(t *testing.T) {
+	for _, tt := range []struct{ in, want string }{
+		{"12.345678", "12"},
+		{"12.7", "13"},
+		{"0", "0"},
+		{"1500", "1500"},
+		{"", ""},
+		{"abc", ""},           // junk becomes unknown, not stored
+		{"-5", ""},            // a negative radius is meaningless
+		{"'; DROP TABLE", ""}, // and cannot reach the statement builder as text
+	} {
+		if got := metres(tt.in); got != tt.want {
+			t.Errorf("metres(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+// TestNormalizeSource guards the rule that an unrecognised or absent source is
+// "unknown" rather than being taken as a GPS fix.
+func TestNormalizeSource(t *testing.T) {
+	for _, tt := range []struct{ in, want string }{
+		{"gps", event.LocationSourceGPS},
+		{"manual", event.LocationSourceManual},
+		{"", ""},
+		{"GPS", ""},       // exact match only
+		{"satellite", ""}, // an unknown claim is not silently promoted
+	} {
+		if got := event.NormalizeSource(tt.in); got != tt.want {
+			t.Errorf("NormalizeSource(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
 }
