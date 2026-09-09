@@ -6,6 +6,7 @@ import (
 
 	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
+	tables "nathejk.dk/nathejk/table"
 
 	_ "embed"
 )
@@ -35,17 +36,11 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if body.TeamID == "" {
 			return nil
 		}
-		sql := fmt.Sprintf("INSERT IGNORE INTO klan SET teamId=%q, year=%q", body.TeamID, msg.Subject().Parts()[1])
+		sql := fmt.Sprintf("INSERT IGNORE INTO klan SET teamId=%s, year=%s",
+			tables.Quote(string(body.TeamID)),
+			tables.Quote(msg.Subject().Parts()[1]),
+		)
 		if err := c.w.Consume(sql); err != nil {
-			return err
-		}
-
-	case msg.Subject().Match("nathejk:patrulje.updated"):
-		var body messages.NathejkTeamUpdated
-		if err := msg.Body(&body); err != nil {
-			return err
-		}
-		if err := c.w.Consume(fmt.Sprintf("UPDATE patrulje SET name=%q, groupName=%q, korps=%q, contactName=%q, contactPhone=%q, contactEmail=%q, contactRole=%q WHERE teamId=%q", body.Name, body.GroupName, body.Korps, body.ContactName, body.ContactPhone, body.ContactEmail, body.ContactRole, body.TeamID)); err != nil {
 			return err
 		}
 
@@ -54,7 +49,11 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
-		if err := c.w.Consume(fmt.Sprintf("UPDATE klan SET signupStatus=%q WHERE teamId=%q", body.Status, body.TeamID)); err != nil {
+		sql := fmt.Sprintf("UPDATE klan SET signupStatus=%s WHERE teamId=%s",
+			tables.Quote(string(body.Status)),
+			tables.Quote(string(body.TeamID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
 
@@ -63,14 +62,13 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
-		msg.Subject().Parts()
-		query := "UPDATE klan SET name=%q, groupName=%q, korps=%q WHERE teamId=%q"
-		args := []any{body.Name, body.GroupName, body.Korps, body.TeamID}
-		//query := "INSERT INTO patrulje SET teamId=%q, year=\"%d\", contactName=%q, contactPhone=%q, contactEmail=%q ON DUPLICATE KEY UPDATE contactName=VALUES(contactName), conta    ctPhone=VALUES(contactPhone), contactEmail=VALUES(contactEmail)"
-		//args := []any{body.TeamID, msg.Time().Year(), body.Name, body.Phone, body.Email}
-		//, body.Name, body.GroupName, body.Korps, body.ContactName, body.ContactPhone, body.ContactEmail, body.ContactRole, body.TeamID))
-
-		if err := c.w.Consume(fmt.Sprintf(query, args...)); err != nil {
+		sql := fmt.Sprintf("UPDATE klan SET name=%s, groupName=%s, korps=%s WHERE teamId=%s",
+			tables.Quote(body.Name),
+			tables.Quote(body.GroupName),
+			tables.Quote(string(body.Korps)),
+			tables.Quote(string(body.TeamID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
 
@@ -79,7 +77,11 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
-		if err := c.w.Consume(fmt.Sprintf("UPDATE klan SET lok=%q WHERE teamId=%q", body.Lok, body.TeamID)); err != nil {
+		sql := fmt.Sprintf("UPDATE klan SET lok=%s WHERE teamId=%s",
+			tables.Quote(body.Lok),
+			tables.Quote(string(body.TeamID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
 

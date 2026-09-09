@@ -7,6 +7,7 @@ import (
 	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
 	"github.com/nathejk/shared-go/types"
+	tables "nathejk.dk/nathejk/table"
 )
 
 type consumer struct {
@@ -33,7 +34,24 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if body.TeamID == "" {
 			return nil
 		}
-		sql := fmt.Sprintf("INSERT INTO patrulje SET teamId=%q, year=\"%d\", contactName=%q, contactPhone=%q, contactEmail=%q ON DUPLICATE KEY UPDATE contactName=VALUES(contactName), contactPhone=VALUES(contactPhone), contactEmail=VALUES(contactEmail)", body.TeamID, msg.Time().Year(), body.Name, body.Phone, body.Email)
+		// The year comes from the subject, not from the message timestamp. Signups for a
+		// September race can be taken in the previous calendar year, and a row labelled
+		// with the wrong year is invisible to every year-scoped read — including
+		// GetByNumber, which is how a scanner resolves an arm number.
+		parts := msg.Subject().Parts()
+		if len(parts) < 2 {
+			return fmt.Errorf("patrulje: subject %q has no year", msg.Subject().Subject())
+		}
+		sql := fmt.Sprintf(
+			"INSERT INTO patrulje SET teamId=%s, year=%s, contactName=%s, contactPhone=%s, "+
+				"contactEmail=%s ON DUPLICATE KEY UPDATE contactName=VALUES(contactName), "+
+				"contactPhone=VALUES(contactPhone), contactEmail=VALUES(contactEmail)",
+			tables.Quote(string(body.TeamID)),
+			tables.Quote(parts[1]),
+			tables.Quote(body.Name),
+			tables.Quote(string(body.Phone)),
+			tables.Quote(string(body.Email)),
+		)
 		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
@@ -42,11 +60,20 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
-		msg.Subject().Parts()
-		query := "UPDATE patrulje SET name=%q, groupName=%q, korps=%q, liga=%q, contactName=%q, contactPhone=%q, contactEmail=%q, contactRole=%q WHERE teamId=%q"
-		args := []any{body.Name, body.GroupName, body.Korps, body.AdvspejdNumber, body.ContactName, body.ContactPhone, body.ContactEmail, substr(body.ContactRole, 0, 90), body.TeamID}
-
-		if err := c.w.Consume(fmt.Sprintf(query, args...)); err != nil {
+		sql := fmt.Sprintf(
+			"UPDATE patrulje SET name=%s, groupName=%s, korps=%s, liga=%s, contactName=%s, "+
+				"contactPhone=%s, contactEmail=%s, contactRole=%s WHERE teamId=%s",
+			tables.Quote(body.Name),
+			tables.Quote(body.GroupName),
+			tables.Quote(string(body.Korps)),
+			tables.Quote(body.AdvspejdNumber),
+			tables.Quote(body.ContactName),
+			tables.Quote(string(body.ContactPhone)),
+			tables.Quote(string(body.ContactEmail)),
+			tables.Quote(substr(body.ContactRole, 0, 90)),
+			tables.Quote(string(body.TeamID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
 
@@ -55,10 +82,11 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
-		query := "UPDATE patrulje SET teamNumber=%q WHERE teamId=%q"
-		args := []any{body.TeamNumber, body.TeamID}
-
-		if err := c.w.Consume(fmt.Sprintf(query, args...)); err != nil {
+		sql := fmt.Sprintf("UPDATE patrulje SET teamNumber=%s WHERE teamId=%s",
+			tables.Quote(body.TeamNumber),
+			tables.Quote(string(body.TeamID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
 
@@ -67,10 +95,12 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
-		query := "UPDATE patrulje SET signupStatus=%q, memberCount=%d WHERE teamId=%q"
-		args := []any{types.SignupStatusStarted, len(body.Members), body.TeamID}
-
-		if err := c.w.Consume(fmt.Sprintf(query, args...)); err != nil {
+		sql := fmt.Sprintf("UPDATE patrulje SET signupStatus=%s, memberCount=%d WHERE teamId=%s",
+			tables.Quote(string(types.SignupStatusStarted)),
+			len(body.Members),
+			tables.Quote(string(body.TeamID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
 	default:

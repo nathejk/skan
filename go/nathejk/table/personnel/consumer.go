@@ -7,6 +7,7 @@ import (
 
 	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
+	tables "nathejk.dk/nathejk/table"
 
 	_ "embed"
 )
@@ -38,8 +39,19 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 			return nil
 		}
 		subject := msg.Subject().Parts()
-		args := []any{body.TeamID, subject[2], subject[1], body.Name, body.Phone.Normalize(), body.Email}
-		sql := fmt.Sprintf("INSERT IGNORE INTO personnel SET userId=%q, userType=%q, year=%q, name=%q, phone=%q, email=%q", args...)
+		if len(subject) < 3 {
+			return fmt.Errorf("personnel: subject %q has no year or type", msg.Subject().Subject())
+		}
+		sql := fmt.Sprintf(
+			"INSERT IGNORE INTO personnel SET userId=%s, userType=%s, year=%s, name=%s, "+
+				"phone=%s, email=%s",
+			tables.Quote(string(body.TeamID)),
+			tables.Quote(subject[2]),
+			tables.Quote(subject[1]),
+			tables.Quote(body.Name),
+			tables.Quote(string(body.Phone.Normalize())),
+			tables.Quote(string(body.Email)),
+		)
 		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
@@ -50,11 +62,22 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 			return err
 		}
 		additionals, _ := json.Marshal(body.Additionals)
-		msg.Subject().Parts()
-		query := "UPDATE personnel SET name=%q, groupName=%q, korps=%q, klan=%q, phone=%q, email=%q, tshirtSize=%q, additionals=%q  WHERE userId=%q"
-		args := []any{body.Name, body.Group, string(body.Corps), body.Klan, body.Phone.Normalize(), body.Email, body.TshirtSize, additionals, body.UserID}
-
-		if err := c.w.Consume(fmt.Sprintf(query, args...)); err != nil {
+		sql := fmt.Sprintf(
+			"UPDATE personnel SET name=%s, groupName=%s, korps=%s, klan=%s, phone=%s, "+
+				"email=%s, tshirtSize=%s, additionals=%s WHERE userId=%s",
+			tables.Quote(body.Name),
+			tables.Quote(body.Group),
+			tables.Quote(string(body.Corps)),
+			tables.Quote(body.Klan),
+			tables.Quote(string(body.Phone.Normalize())),
+			tables.Quote(string(body.Email)),
+			tables.Quote(body.TshirtSize),
+			// JSON is full of double quotes and backslashes, so this is the value most
+			// likely to have been mangled by %q.
+			tables.Quote(string(additionals)),
+			tables.Quote(string(body.UserID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
 		/*

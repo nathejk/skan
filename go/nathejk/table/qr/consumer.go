@@ -6,6 +6,7 @@ import (
 
 	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
+	tables "nathejk.dk/nathejk/table"
 )
 
 type consumer struct {
@@ -34,9 +35,15 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		// INSERT IGNORE, so the first binding within a year wins. A later scanner
 		// cannot silently re-point a map that is already in play; correcting a
 		// mis-registration is an HQ job, not something a repeat POST can do.
-		sql := "INSERT IGNORE INTO qr SET year=%q, id=%q, teamNumber=%q, mapCreatedBy=%q, mapCreatedAt=%q"
-		args := []any{parts[1], body.QrID, body.TeamNumber, body.ScannerID, msg.Time()}
-		if err := c.w.Consume(fmt.Sprintf(sql, args...)); err != nil {
+		sql := fmt.Sprintf(
+			"INSERT IGNORE INTO qr SET year=%s, id=%s, teamNumber=%s, mapCreatedBy=%s, mapCreatedAt=%s",
+			tables.Quote(parts[1]),
+			tables.Quote(string(body.QrID)),
+			tables.Quote(body.TeamNumber),
+			tables.Quote(body.ScannerID),
+			tables.Datetime(msg.Time()),
+		)
+		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
 

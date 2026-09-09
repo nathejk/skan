@@ -6,6 +6,7 @@ import (
 
 	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
+	tables "nathejk.dk/nathejk/table"
 )
 
 type consumer struct {
@@ -32,9 +33,20 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if len(parts) < 2 {
 			return fmt.Errorf("scan: subject %q has no year", msg.Subject().Subject())
 		}
-		sql := "INSERT IGNORE INTO scan SET year=%q, qrId=%q, teamId=%q, teamNumber=%q, scannerId=%q, scannerPhone=%q, uts=%d, latitude=%q, longitude=%q"
-		args := []any{parts[1], body.QrID, body.TeamID, body.TeamNumber, body.ScannerID, body.ScannerPhone, msg.Time().Unix(), body.Location.Latitude, body.Location.Longitude}
-		if err := c.w.Consume(fmt.Sprintf(sql, args...)); err != nil {
+		sql := fmt.Sprintf(
+			"INSERT IGNORE INTO scan SET year=%s, qrId=%s, teamId=%s, teamNumber=%s, "+
+				"scannerId=%s, scannerPhone=%s, uts=%d, latitude=%s, longitude=%s",
+			tables.Quote(parts[1]),
+			tables.Quote(string(body.QrID)),
+			tables.Quote(string(body.TeamID)),
+			tables.Quote(body.TeamNumber),
+			tables.Quote(body.ScannerID),
+			tables.Quote(string(body.ScannerPhone)),
+			msg.Time().Unix(),
+			tables.Quote(body.Location.Latitude),
+			tables.Quote(body.Location.Longitude),
+		)
+		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
 
