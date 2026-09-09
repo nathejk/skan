@@ -238,7 +238,7 @@ func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Malformed request", http.StatusExpectationFailed)
 		return
 	}
-	qr, err := a.models.QR.GetByID(r.Context(), qrID)
+	qr, err := a.models.QR.GetByID(r.Context(), a.config.year, qrID)
 	log.Printf("Scanned %s %#v %#v", qrID, qr, err)
 	if err != nil {
 		a.commands.QR.Found(qrID, *user)

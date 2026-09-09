@@ -10,7 +10,6 @@ import (
 
 type consumer struct {
 	w cqrs.Writer
-	c int
 }
 
 func (c *consumer) Consumes() []cqrs.Subject {
@@ -20,8 +19,6 @@ func (c *consumer) Consumes() []cqrs.Subject {
 }
 
 func (c *consumer) HandleMessage(msg cqrs.Message) error {
-	c.c++
-	log.Printf("Scan count %d", c.c)
 	switch true {
 	case msg.Subject().Match("NATHEJK.*.qr.*.scanned"):
 		var body messages.NathejkQrScanned

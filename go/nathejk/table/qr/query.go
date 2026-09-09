@@ -14,13 +14,20 @@ type querier struct {
 	db *sql.DB
 }
 
-func (q *querier) GetByID(ctx context.Context, qrID types.QrID) (*QR, error) {
+// GetByID resolves a QR id within one event year.
+//
+// The year is not optional. Ids restart at 1 each event and the stickers themselves
+// may be reused from year to year, so an id alone does not identify a map.
+func (q *querier) GetByID(ctx context.Context, yearSlug string, qrID types.QrID) (*QR, error) {
+	if yearSlug == "" {
+		return nil, tables.ErrRecordNotFound
+	}
 	query := `SELECT id, teamNumber, mapCreatedBy, mapCreatedAt
 		FROM qr
-		WHERE id = ?`
+		WHERE id = ? AND year = ?`
 	var r QR
 	var id int
-	err := q.db.QueryRow(query, qrID).Scan(
+	err := q.db.QueryRowContext(ctx, query, qrID, yearSlug).Scan(
 		&id,
 		&r.TeamNumber,
 		&r.MapCreatedBy,

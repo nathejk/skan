@@ -39,7 +39,7 @@ type PersonnelInterface interface {
 	GetByPhone(context.Context, types.PhoneNumber) (*personnel.Person, error)
 }
 type QrInterface interface {
-	GetByID(context.Context, types.QrID) (*qr.QR, error)
+	GetByID(ctx context.Context, yearSlug string, qrID types.QrID) (*qr.QR, error)
 }
 type ScanInterface interface {
 	GetAll(context.Context, scan.Filter) ([]*scan.Scan, error)
