@@ -40,14 +40,14 @@ func (c *qr) Found(qrID types.QrID, scanner login.User) error {
 
 	return c.p.Publish(msg)
 }
-func (c *qr) Register(qrID types.QrID, team patrulje.Patrulje, scanner login.User) error {
-	body := &messages.NathejkQrRegistered{
-		QrID:         qrID,
-		TeamID:       team.TeamID,
-		TeamNumber:   team.TeamNumber,
-		ScannerID:    string(scanner.ID),
-		ScannerPhone: scanner.Phone,
-	}
+func (c *qr) Register(qrID types.QrID, team patrulje.Patrulje, scanner login.User, mapID string) error {
+	body := &event.QrRegistered{MapID: mapID}
+	body.QrID = qrID
+	body.TeamID = team.TeamID
+	body.TeamNumber = team.TeamNumber
+	body.ScannerID = string(scanner.ID)
+	body.ScannerPhone = scanner.Phone
+
 	msg := c.p.MessageFunc()(cqrs.SubjectFromStr(fmt.Sprintf("NATHEJK:%s.qr.%s.registered", c.yearSlug, qrID)))
 	msg.SetBody(body)
 	meta := messages.Metadata{Producer: c.producerSlug}

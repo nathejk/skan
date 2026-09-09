@@ -5,6 +5,7 @@ import (
 
 	"github.com/jrgensen/cqrs"
 	"github.com/nathejk/shared-go/messages"
+	"nathejk.dk/nathejk/event"
 	tables "nathejk.dk/nathejk/table"
 )
 
@@ -22,7 +23,10 @@ func (c *consumer) Consumes() []cqrs.Subject {
 func (c *consumer) HandleMessage(msg cqrs.Message) error {
 	switch true {
 	case msg.Subject().Match("nathejk.*.senior.*.updated"):
-		var body messages.NathejkSeniorUpdated
+		// event.SeniorUpdated rather than messages.NathejkSeniorUpdated: shared-go dropped
+		// teamId from that struct, but publishers still send it and the klan link is what
+		// gives a bandit a LOK label. See nathejk/event/senior.go.
+		var body event.SeniorUpdated
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
@@ -34,7 +38,7 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		args := []any{
 			tables.Quote(string(body.MemberID)),
 			tables.Quote(msg.Subject().Parts()[1]),
-			tables.Quote(string(body.TeamID)),
+			tables.Quote(body.TeamID),
 			tables.Quote(body.Name),
 			tables.Quote(body.Address),
 			tables.Quote(body.PostalCode),

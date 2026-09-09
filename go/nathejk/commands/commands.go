@@ -11,7 +11,7 @@ import (
 type Commands struct {
 	QR interface {
 		Found(qrID types.QrID, scanner login.User) error
-		Register(qrID types.QrID, team patrulje.Patrulje, scanner login.User) error
+		Register(qrID types.QrID, team patrulje.Patrulje, scanner login.User, mapID string) error
 		Scan(qrID types.QrID, team patrulje.Patrulje, scanner login.User, pos event.Position) error
 	}
 }

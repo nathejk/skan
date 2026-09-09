@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/jrgensen/cqrs"
-	"github.com/nathejk/shared-go/messages"
+	"nathejk.dk/nathejk/event"
 	tables "nathejk.dk/nathejk/table"
 )
 
@@ -22,7 +22,7 @@ func (c *consumer) Consumes() []cqrs.Subject {
 func (c *consumer) HandleMessage(msg cqrs.Message) error {
 	switch true {
 	case msg.Subject().Match("NATHEJK.*.qr.*.registered"):
-		var body messages.NathejkQrRegistered
+		var body event.QrRegistered
 		if err := msg.Body(&body); err != nil {
 			return err
 		}
@@ -36,12 +36,14 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		// cannot silently re-point a map that is already in play; correcting a
 		// mis-registration is an HQ job, not something a repeat POST can do.
 		sql := fmt.Sprintf(
-			"INSERT IGNORE INTO qr SET year=%s, id=%s, teamNumber=%s, mapCreatedBy=%s, mapCreatedAt=%s",
+			"INSERT IGNORE INTO qr SET year=%s, id=%s, teamNumber=%s, mapCreatedBy=%s, "+
+				"mapCreatedAt=%s, mapId=%s",
 			tables.Quote(parts[1]),
 			tables.Quote(string(body.QrID)),
 			tables.Quote(body.TeamNumber),
 			tables.Quote(body.ScannerID),
 			tables.Datetime(msg.Time()),
+			tables.Quote(body.MapID),
 		)
 		if err := c.w.Consume(sql); err != nil {
 			return err

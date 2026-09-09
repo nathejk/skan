@@ -42,6 +42,26 @@ func NormalizeSource(s string) string {
 	}
 }
 
+// QrRegistered is the shared registered-event body plus the map sheet handed over.
+//
+// # Why the map id belongs on this event
+//
+// Registering a code is the moment a specific *sheet* is given to a specific patrulje.
+// The sheet is what determines which checkpoints those scouts can now see, so "which map
+// is this?" is part of the fact being recorded, not metadata about it — and a consumer
+// deciding what a patrol may look at needs it from the event rather than by guessing from
+// a timestamp and a handout order.
+//
+// Additive, like LocationSource: consumers decoding into messages.NathejkQrRegistered
+// ignore it, and an older event reads back as an empty map id — which means "we do not
+// know which sheet", not "no sheet".
+type QrRegistered struct {
+	messages.NathejkQrRegistered
+
+	// MapID is the kort sheet handed to the patrulje with this code.
+	MapID string `json:"mapId,omitempty"`
+}
+
 // QrScanned is the shared scanned-event body plus the position's provenance.
 //
 // The shared struct is embedded rather than copied, so its fields stay defined in one

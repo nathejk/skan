@@ -56,8 +56,9 @@ only.
 
 A freshly printed code means nothing to the system. The first scanner is asked
 for the patrol's **team number** — the large number on the scouts' arms, not the
-small number printed beside the QR code. Confirming it ties that sticker to that
-patrol permanently.
+small number printed beside the QR code — and for **which map sheet** they are handing
+over, chosen from the set drawn up for the scouts. Confirming ties that sticker to that
+patrol, and that sheet, permanently.
 
 Because a patrol receives its first map at the start of the race, and **no patrol may
 start without having been photographed**, a photograph always exists at this point.
@@ -277,9 +278,11 @@ Short, honest list — details and more items in `.rules`, tracked as tasks unde
 
 - **The login cookie is unsigned**, so a scanner's identity can be forged. Fine
   for a scouting race, not fine for anything sensitive.
-- **The `locationSource` and `locationAccuracy` fields are skan-local.** They are added
-  additively to the shared scanned-event body and should be upstreamed into `shared-go`
-  so other services can rely on them.
+- **Three event fields are skan-local** (`locationSource`, `locationAccuracy`, `mapId`).
+  They are added additively to the shared event bodies and should be upstreamed into
+  `shared-go` so other services can rely on them.
+- **`shared-go` dropped `teamId` from the senior event** while publishers still send it,
+  so skan restores it locally. That one is a bug to fix upstream.
 - **There is no per-patrol remark.** The old app could show a red note about a patrol;
   no projection holds one, so the markup was removed rather than faked.
 

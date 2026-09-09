@@ -10,15 +10,30 @@
         <img src="{{ .photo }}" alt="Billede af patruljen" class="img-rounded col-md-6">
         </div>
         <p class="lead"><strong>{{ .armNumber }}. {{ .team.Name }}</strong></p>
-        <p>Tjek billedet grundigt. Når du bekræfter, bliver QR-koden på kortet bundet til
-        denne patrulje for resten af løbet.</p>
-        <div class="row">
+
         <form action="" method="post">
             <input type="hidden" name="photoRef" value="{{ .photoRef }}" />
+
+            <div class="form-group" style="text-align:left">
+                <label for="mapId">Hvilket kort får patruljen?</label>
+                <select class="form-control input-lg" id="mapId" name="mapId" required>
+                    <option value="">Vælg kort &hellip;</option>
+                    {{ range .maps }}
+                    <option value="{{ .ID }}">{{ .Name }}{{ if .Format }} ({{ .Format }}){{ end }}</option>
+                    {{ end }}
+                </select>
+            </div>
+
+            <p>Tjek billedet grundigt. Når du bekræfter, bliver QR-koden på kortet bundet til
+            denne patrulje for resten af løbet.</p>
             <button type="submit" class="btn btn-primary btn-lg" name="confirmed" value="{{ .team.TeamNumber }}">Ja, det er dem &ndash; tilknyt kortet</button>
         </form>
-        </div>
         <p><a href="?">Nej, det er en anden patrulje</a></p>
+
+        {{ else if .noMaps }}
+        <p class="lead" style="color:red">Der er ikke oprettet nogen kort til spejderne i år,
+        så der er ingenting at tilknytte QR-koden til.</p>
+        <p>Kontakt HQ.</p>
 
         {{ else if .noPhoto }}
         <p class="lead" style="color:red">Vi har ikke noget billede af patrulje

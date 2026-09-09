@@ -71,6 +71,16 @@ type PhotoCoverInterface interface {
 	Ref(year, teamID string) (string, error)
 }
 
+// KortInterface is the map sheets a patrulje may be handed.
+//
+// Narrow on purpose: skan never creates or edits a sheet — that is hq's job — and a
+// scanner only ever needs to pick one and have the choice validated. See KortReader for
+// why this does not go through the kort projection's own querier.
+type KortInterface interface {
+	SpejderSheets(ctx context.Context, year string) ([]KortSheet, error)
+	IsSpejderSheet(ctx context.Context, year, id string) (bool, error)
+}
+
 // Models is the read side as handlers see it: one interface per projection this
 // service actually reads.
 type Models struct {
@@ -82,4 +92,5 @@ type Models struct {
 	Scan       ScanInterface
 	Photo      PhotoInterface
 	PhotoCover PhotoCoverInterface
+	Kort       KortInterface
 }

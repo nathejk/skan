@@ -16,7 +16,7 @@ require (
 	github.com/jrgensen/cqrs v0.1.0
 	github.com/jrgensen/stream v0.1.2
 	github.com/lmittmann/tint v1.1.2
-	github.com/nathejk/shared-go v0.0.0-20250904085635-4e5edbc6ac16
+	github.com/nathejk/shared-go v0.0.0-20260907212133-4445c9538f2e
 )
 
 require (
@@ -27,6 +27,7 @@ require (
 	github.com/bep/godartsass/v2 v2.5.0 // indirect
 	github.com/bep/golibsass v1.2.0 // indirect
 	github.com/creack/pty v1.1.24 // indirect
+	github.com/doug-martin/goqu/v9 v9.19.0 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect

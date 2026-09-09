@@ -109,6 +109,15 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	number, _ := strconv.Atoi(r.URL.Query().Get("number"))
 	team, _ := a.models.Patrulje.GetByNumber(r.Context(), a.config.year, number)
+
+	// The sheets a patrulje may be handed. Read even when no team is chosen yet, so a
+	// year with no patrol maps drawn up says so on the first screen rather than after the
+	// scanner has typed a number.
+	spejderMaps, mapsErr := a.spejderSheets(r.Context())
+	if mapsErr != nil {
+		log.Printf("reading spejder map sheets: %v", mapsErr)
+	}
+
 	data := map[string]any{
 		"qrid":     chi.URLParam(r, "id"),
 		"checksum": chi.URLParam(r, "cs"),
@@ -117,6 +126,8 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		"photo":    "",
 		"photoRef": "",
 		"noPhoto":  false,
+		"maps":     spejderMaps,
+		"noMaps":   len(spejderMaps) == 0,
 	}
 	if team != nil {
 		// The confirmation is only meaningful against the patrol's real photograph, so
@@ -125,7 +136,7 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		data["armNumber"] = fmt.Sprintf("%s-%d", team.TeamNumber, team.MemberCount)
 		data["photoRef"] = ref
 		data["photo"] = a.coverPhotoThumbURL(r.Context(), team.TeamID)
-		data["confirm"] = ref != ""
+		data["confirm"] = ref != "" && len(spejderMaps) > 0
 		data["noPhoto"] = ref == ""
 	}
 
@@ -171,7 +182,21 @@ func (a *App) doMapHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.commands.QR.Register(qrID, *team, *user); err != nil {
+	// Which sheet is being handed over is part of the fact being recorded, so it is
+	// required — and checked against the spejder set rather than trusted from the form,
+	// which could otherwise name a crew sheet and show the scouts checkpoints they are
+	// not meant to have yet.
+	mapID := r.FormValue("mapId")
+	if mapID == "" {
+		a.registrationRefused(w, r, "Vælg hvilket kort patruljen får, før du tilknytter QR-koden.")
+		return
+	}
+	if !a.isSpejderSheet(r.Context(), mapID) {
+		a.registrationRefused(w, r, "Det valgte kort hører ikke til spejdernes kortsæt. Prøv igen, og kontakt HQ hvis det bliver ved.")
+		return
+	}
+
+	if err := a.commands.QR.Register(qrID, *team, *user, mapID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

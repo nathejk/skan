@@ -17,6 +17,7 @@ import (
 	"nathejk.dk/internal/logging"
 	"nathejk.dk/nathejk/commands"
 	"nathejk.dk/nathejk/table/klan"
+	"nathejk.dk/nathejk/table/kort"
 	"nathejk.dk/nathejk/table/patrulje"
 	"nathejk.dk/nathejk/table/personnel"
 	"nathejk.dk/nathejk/table/photo"
@@ -86,12 +87,17 @@ func main() {
 	}
 	photocovertable := photocover.New(nil, sqlw, db.DB())
 
+	// Maps handed out during the race. Constructed with a **nil publisher**: the sheets
+	// and the sets they belong to are drawn up in hq, and a scanner may only choose among
+	// them — never create or edit one.
+	korttable := kort.New(nil, sqlw, db.DB())
+
 	// Every schema exists from here on, so failures become recoverable rather than
 	// fatal.
 	sqlw.Arm()
 
 	mux := xstream.NewMux(js)
-	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable, phototable, photocovertable)
+	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable, phototable, photocovertable, korttable)
 	if err := mux.Run(ctx); err != nil {
 		logger.PrintFatal(err, nil)
 	}
@@ -109,6 +115,9 @@ func main() {
 		Scan:       scantable,
 		Photo:      phototable,
 		PhotoCover: photocovertable,
+		// Reads the tables korttable maintains, but asks a narrower question than the
+		// kort projection's own querier — see data.KortReader.
+		Kort: data.KortReader{DB: db.DB()},
 	}
 	app.commands = commands.New(js, app.config.year)
 

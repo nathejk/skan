@@ -104,6 +104,42 @@ will be deleted (task 007) — not run alongside the new ones. Both replacement
 modules are public on the module proxy. Neither is in `go.mod` yet, which is why
 `go build ./...` fails today.
 
+### Maps handed out (`kort`)
+
+`nathejk/table/kort` is **hq's package**, copied in like `photo`: it owns the map sheets
+printed for the race and the sets (`kortsaet`) they belong to. Do not edit it. It is
+constructed with a **nil publisher** — sheets are drawn up in hq, and a scanner may only
+choose among them.
+
+- **The "spejder set" is the `kortsaet` marked for the `patrulje` team type.** There is no
+  `spejder` team type; the word names the scouts, the type names the team they form. An
+  unmarked set is the **crew** set and is deliberately *not* a fallback when choosing a
+  patrol's sheet — a crew sheet would show the scouts checkpoints they should not see yet.
+  Several sets may carry the same marking, so it is a filter, not a key.
+- **`kort.Maps()` cannot be used here.** It resolves checkpoint lists and handout posts
+  against the `checkpoint` and `checkgroup` projections, which this service does not run,
+  and fails with `Table 'skan.checkpoint' doesn't exist`. `data.KortReader` asks the
+  narrower question skan has instead. Do not "fix" this by creating those tables empty:
+  `Maps()` would then succeed while reporting every sheet as having no checkpoints.
+- Registering a code **requires** a sheet from the spejder set, validated server-side, and
+  the chosen id travels on the `registered` event as `mapId` (`event.QrRegistered`).
+
+### Event bodies this service extends (`nathejk/event`)
+
+Three fields live here because `shared-go` has nowhere for them, all added **additively**
+so consumers decoding into the shared bodies are unaffected:
+
+| Field | On | Why |
+|---|---|---|
+| `locationSource` | `qr.*.scanned` | GPS vs a hand-placed marker |
+| `locationAccuracy` | `qr.*.scanned` | metres of confidence; empty for a manual marker |
+| `mapId` | `qr.*.registered` | which sheet was handed over |
+
+All three should be **upstreamed into `shared-go`** so hq and the map tooling can rely on
+them. `event.SeniorUpdated` is a different case: it *restores* a `teamId` that shared-go
+dropped while publishers kept sending it — that one is a bug to fix upstream, not a field
+to add.
+
 ### Event subjects
 
 Pattern: `NATHEJK.{year}.{entity}.{id}.{event}`
@@ -494,6 +530,7 @@ picking up, creating or updating a task.
 | 014 | Scope QR ids by year | high | **done** | — |
 | 015 | Registration redirect races the projection | medium | **done** | — |
 | 016 | Map picker replaces the typed-coordinate prompt | medium | **done** | — |
+| 017 | Pick a map from the spejder set when linking a QR code | high | **done** | — |
 
 **Open: none.** Every filed task is done; see *Known deviations* for what remains
 unresolved by choice.
