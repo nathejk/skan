@@ -9,69 +9,59 @@ networks:
     external: true
 
 services:
-  gw:
-    image: jrgensen/gateway
-    platform: linux/x86_64
-    environment:
-      PROXY_MAPPINGS: >
-        skan:api
-        mysql:adminer:8080
-        redis:redis-commander:8081
-    networks:
-    - local
-    - traefik
-    labels:
-      traefik.enable: true
-      traefik.docker.network: traefik
-      traefik.http.routers.skan.rule: Host(`skan.dev.nathejk.dk`) || Host(`skan.local.nathejk.dk`) || HostRegexp(`.+\.skan\..+\.nathejk\.dk`)
-
-  prod:
-    build:
-      context: .
-      target: prod
-      dockerfile: docker/Dockerfile
-    networks:
-    - local
-    - jetstream
-    environment:
-      #GO_BUILD_FLAGS: -race
-      YEAR: 2026
-      JETSTREAM_DSN: nats://dev.nathejk.dk:4222
-      DB_DSN: root:ib@tcp(mysql:3306)/skan?parseTime=true
-      SMS_DSN: cpsms://TOKEN@api.cpsms.dk
-      REDIS_ADDR: redis:6379
-      SECRET: nh2025
-    depends_on:
-    - gw
-    - mysql
-
   api:
     build:
       context: .
       target: dev
       dockerfile: docker/Dockerfile
-    #entrypoint: /app/docker/bin/init-dev
-    #command: api
     volumes:
     - ./go:/app
     - ./webroot:/webroot
     - go:/go
     networks:
     - local
+    - traefik
     - jetstream
     environment:
       #GO_BUILD_FLAGS: -race
       YEAR: 2026
-      JETSTREAM_DSN: nats://dev.nathejk.dk:4222
+      JETSTREAM_DSN: "nats://jetstream:4222"
       DB_DSN: root:ib@tcp(mysql:3306)/skan?parseTime=true
       SMS_DSN: cpsms://TOKEN@api.cpsms.dk
       REDIS_ADDR: redis:6379
       SECRET: nh2025
-    ports:
-    - 80
+    labels:
+      traefik.enable: true
+      traefik.docker.network: traefik
+      # Served over HTTPS via a redirect: the scan pages call
+      # navigator.geolocation, which browsers only expose in a secure context,
+      # and *.local.nathejk.dk is not treated as localhost.
+      #
+      # The redirect middleware is declared here, scoped to this repo. There is no
+      # shared `redirect-to-https@docker` on the shared Traefik — referencing one
+      # makes the router fail with "middleware does not exist"; sibling repos
+      # declare their own the same way (e.g. hq-redirect-to-https).
+      traefik.http.middlewares.skan-redirect-to-https.redirectscheme.scheme: https
+      traefik.http.middlewares.skan-redirect-to-https.redirectscheme.permanent: true
+      traefik.http.routers.skan.rule: Host(`skan.local.nathejk.dk`)
+      traefik.http.routers.skan.entrypoints: web
+      traefik.http.routers.skan.middlewares: skan-redirect-to-https
+      traefik.http.routers.skan.service: skan
+      traefik.http.routers.skan-secure.rule: Host(`skan.local.nathejk.dk`)
+      traefik.http.routers.skan-secure.entrypoints: websecure
+      traefik.http.routers.skan-secure.tls.certresolver: desec
+      traefik.http.routers.skan-secure.service: skan
+      # Both routers point at one explicitly-named service. Traefik's implicit
+      # service for this container would be `api-skan`; naming it `skan` keeps it
+      # repo-scoped and consistent with skan-sql / skan-redis below.
+      traefik.http.services.skan.loadbalancer.server.port: 80
     depends_on:
-    - gw
     - mysql
+
+  # The production image is deliberately NOT a service here: `docker compose up`
+  # would build it, and the prod stage runs the full test/lint/vuln gate with no
+  # source mount. Build it explicitly instead:
+  #   docker build -f docker/Dockerfile --target prod -t skan:local .
 
   mysql:
     image: mariadb:10.8
@@ -93,8 +83,13 @@ services:
       ADMINER_DEFAULT_DB: skan
     networks:
     - local
+    - traefik
+    labels:
+      traefik.enable: true
+      traefik.docker.network: traefik
+      traefik.http.routers.skan-sql.rule: Host(`mysql.skan.local.nathejk.dk`)
+      traefik.http.services.skan-sql.loadbalancer.server.port: 8080
     depends_on:
-    - gw
     - mysql
 
   redis:
@@ -110,4 +105,9 @@ services:
       REDIS_HOSTS: skan:redis:6379
     networks:
     - local
-
+    - traefik
+    labels:
+      traefik.enable: true
+      traefik.docker.network: traefik
+      traefik.http.routers.skan-redis.rule: Host(`redis.skan.local.nathejk.dk`)
+      traefik.http.services.skan-redis.loadbalancer.server.port: 8081
