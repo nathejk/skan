@@ -71,7 +71,7 @@ func main() {
 		QR:        qrtable,
 		Scan:      scantable,
 	}
-	app.commands = commands.New(js, app.models, app.config.year)
+	app.commands = commands.New(js, app.config.year)
 
 	app.Run(ctx)
 }

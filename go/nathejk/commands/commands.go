@@ -1,22 +1,13 @@
 package commands
 
 import (
-	"github.com/nathejk/shared-go/messages"
 	"github.com/nathejk/shared-go/types"
-	"nathejk.dk/internal/data"
 	"nathejk.dk/internal/login"
 	"nathejk.dk/nathejk/table/patrulje"
 	"nathejk.dk/superfluids/streaminterface"
 )
 
 type Commands struct {
-	Team interface {
-		Signup(types.TeamType, *messages.NathejkTeamSignedUp) error
-		UpdatePatrulje(types.TeamID, Patrulje, Contact, []Spejder) error
-		StartPatrulje(types.TeamID, []StartPatruljeMember) error
-		UpdateKlan(types.TeamID, Klan, []Senior) error
-		AssignToLok(types.TeamID, string) error
-	}
 	QR interface {
 		Found(qrID types.QrID, scanner login.User) error
 		Register(qrID types.QrID, team patrulje.Patrulje, scanner login.User) error
@@ -24,9 +15,8 @@ type Commands struct {
 	}
 }
 
-func New(stream streaminterface.Publisher, models data.Models, yearSlug string) Commands {
+func New(stream streaminterface.Publisher, yearSlug string) Commands {
 	return Commands{
-		Team: NewTeam(stream, models.Teams, yearSlug),
-		QR:   NewQR(stream, yearSlug),
+		QR: NewQR(stream, yearSlug),
 	}
 }
