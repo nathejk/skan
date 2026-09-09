@@ -66,6 +66,10 @@ RUN apk add --no-cache --update \
     && rm -rf /tmp/* /var/cache/apk/*
 WORKDIR /app
 COPY --from=build /tmp/main .
+# The Go binary serves static files from /webroot (see routes.go). Without this
+# the production image 404s every static asset, while dev works because compose
+# mounts ./webroot.
+COPY webroot /webroot
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost/healthcheck || exit 1
