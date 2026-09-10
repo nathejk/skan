@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/doug-martin/goqu/v9"
 	"github.com/jrgensen/cqrs"
 	"github.com/jrgensen/stream"
 	"github.com/jrgensen/stream/subject"
@@ -33,11 +34,41 @@ func (c *consumer) HandleMessage(msg stream.Message) error {
 		}
 		id := msg.Subject().Parts()[3]
 		year := msg.Subject().Parts()[1]
-		if body.TimeRange != nil {
-			sql := fmt.Sprintf("INSERT INTO checkpersonnel (id, year, userId, checkpointId, startUts, endUts) VALUES (%q, %q, %q, %q, %d, %d)", id, year, body.UserID, body.CheckpointID, body.TimeRange.Start.Unix(), body.TimeRange.End.Unix())
-			return c.w.Consume(sql)
+
+		// Upsert for the same reason as checkpoint.created: a replay must be able to run
+		// this twice. A plain INSERT dead-lettered every assignment on every boot.
+		//
+		// goqu rather than fmt.Sprintf("%q"): `%q` emits a Go string literal, not a SQL one
+		// (see nathejk/table/sql.go), and the values here include a post's Danish name and
+		// address further down this file.
+		row := goqu.Record{
+			"id":           id,
+			"year":         year,
+			"userId":       string(body.UserID),
+			"checkpointId": string(body.CheckpointID),
 		}
-		sql := fmt.Sprintf("INSERT INTO checkpersonnel (id, year, userId, checkpointId) VALUES (%q, %q, %q, %q)", id, year, body.UserID, body.CheckpointID)
+		update := goqu.Record{
+			"year":         year,
+			"userId":       string(body.UserID),
+			"checkpointId": string(body.CheckpointID),
+		}
+		if body.TimeRange != nil {
+			// Only set the shift when the event carries one. `.timespecified` sets it
+			// separately, and 0 means "unbounded" to every reader — so an event without a
+			// range must not overwrite a range that was specified later in the stream.
+			row["startUts"] = body.TimeRange.Start.Unix()
+			row["endUts"] = body.TimeRange.End.Unix()
+			update["startUts"] = body.TimeRange.Start.Unix()
+			update["endUts"] = body.TimeRange.End.Unix()
+		}
+
+		sql, _, err := goqu.Dialect("mysql").Insert("checkpersonnel").
+			Rows(row).
+			OnConflict(goqu.DoUpdate("id", update)).
+			ToSQL()
+		if err != nil {
+			return err
+		}
 		return c.w.Consume(sql)
 
 	case msg.Subject().Match("NATHEJK.*.checkpersonnel.*.timespecified"):

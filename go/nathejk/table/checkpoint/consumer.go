@@ -39,9 +39,34 @@ func (c *consumer) HandleMessage(msg stream.Message) error {
 			msg.Subject().Parts()[1],
 			body.CheckgroupID,
 		}
-		sql := fmt.Sprintf("INSERT INTO checkpoint (id, year, checkgroupId) VALUES (%q, %q, %q)", args...)
+		// Upsert, not a plain INSERT. Projections are rebuilt by replaying the stream from
+		// the beginning on every boot, so a create must be able to run twice: with a plain
+		// INSERT every restart re-inserted all 13 checkpoints, each failing on the primary
+		// key and landing in the dead-letter table. The data stayed correct, which is what
+		// made it easy to miss — but it broke the cqrs.Consumer idempotency contract and
+		// left a permanent 16-row floor under a signal that is only useful at zero.
+		//
+		// The update list is only the columns this event carries. `.updated` owns name,
+		// address, position and the open times, and replay delivers it after this, so
+		// restating them here would undo it.
+		sql, _, err := dialect.Insert("checkpoint").
+			Rows(goqu.Record{
+				"id":           args[0],
+				"year":         args[1],
+				"checkgroupId": args[2],
+			}).
+			OnConflict(goqu.DoUpdate("id", goqu.Record{
+				"year":         args[1],
+				"checkgroupId": args[2],
+			})).
+			ToSQL()
+		if err != nil {
+			return err
+		}
+		// Returning the error rather than nil: a statement the database refuses is exactly
+		// what the dead-letter writer exists to record.
 		if err := c.w.Consume(sql); err != nil {
-			return nil
+			return err
 		}
 
 	case msg.Subject().Match("NATHEJK.*.checkpoint.*.updated"):
@@ -74,7 +99,7 @@ func (c *consumer) HandleMessage(msg stream.Message) error {
 		checkpointID := msg.Subject().Parts()[3]
 		sql, _, _ := dialect.Update("checkpoint").Set(record).Where(goqu.C("id").Eq(checkpointID)).ToSQL()
 		if err := c.w.Consume(sql); err != nil {
-			return nil
+			return err
 		}
 
 	case msg.Subject().Match("NATHEJK.*.checkpoint.*.deleted"):

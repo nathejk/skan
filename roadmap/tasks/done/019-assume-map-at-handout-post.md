@@ -211,3 +211,22 @@ projections present, `kort.Maps()` works and the narrow reader can probably go a
   dead-letters" health signal every other projection here upholds.
 - 2026-09-10 09:12 — Completed. Cleaned up the injected rows and confirmed by replay that the
   remaining state is stream-derived.
+- 2026-09-10 09:15 — HQ: the projections may be edited after all, so the defect above is now
+  fixed rather than only reported. Both create/add handlers are upserts
+  (`ON DUPLICATE KEY UPDATE`, built with goqu, which also retired their `%q` quoting — the
+  thing task 013 removed everywhere else). Two details worth keeping:
+  — the update list on `checkpoint.created` is only the columns that event carries, because
+  `.updated` owns name, address, position and the open times and arrives after it on replay;
+  restating them would undo it.
+  — `checkpersonnel.added` only writes `startUts`/`endUts` when the event actually carries a
+  range, since `.timespecified` sets them separately and `0` means "unbounded" to every
+  reader.
+  Also changed two `return nil`-on-error slips to `return err`: a statement the database
+  refuses is exactly what the dead-letter writer exists to record.
+- 2026-09-10 09:18 — ✅ Verified the fix the only way that means anything: booted twice
+  **without** dropping the tables. First boot 0 dead-letters, second boot — the one that used
+  to produce 16 — also **0**, with 13 checkpoints and 3 assignments intact. Re-checked the
+  suggestion still works afterwards, and cleaned up the injected assignment.
+- 2026-09-10 09:18 — Noted in `.rules` that these two packages now **diverge from hq's
+  copies**, so re-copying them would silently revert the fix, and added idempotency to the
+  projection conventions. The fix should go upstream.

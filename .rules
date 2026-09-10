@@ -127,12 +127,15 @@ choose among them.
   conservative: the shift's time range is honoured when set, the read is year-scoped, and
   **two candidate sheets mean no suggestion at all** rather than a guess. The suggestion is
   preselected and labelled, never applied silently.
-- **The `checkpoint` and `checkpersonnel` projections are not idempotent.** Both use plain
-  `INSERT`, so every replay re-inserts rows that already exist and dead-letters them — 16 per
-  boot. The data stays correct, but it breaks the `cqrs.Consumer` contract and it means
-  "zero dead-letters" is no longer a clean health signal. Fix belongs upstream in hq
-  (`ON DUPLICATE KEY UPDATE`); they also still build SQL with `%q`. Do not patch them here —
-  a copied package stays identical to its origin.
+- **The `checkpoint` and `checkpersonnel` projections are locally fixed and therefore
+  diverge from hq's copies.** Both used a plain `INSERT` for their create/add events, so
+  every replay re-inserted rows that already existed and dead-lettered them — 16 per boot
+  here. The data stayed correct, which is what made it easy to miss, but it broke the
+  `cqrs.Consumer` idempotency contract and put a permanent floor under a signal that is only
+  useful at zero. Both are now upserts (`ON DUPLICATE KEY UPDATE` via goqu), which also
+  replaced their `%q` quoting.
+  **Re-copying either package from hq would silently revert this** — diff before you do, and
+  push the fix upstream instead.
 - Registering a code **requires** a sheet from the spejder set, validated server-side, and
   the chosen id travels on the `registered` event as `mapId` (`event.QrRegistered`).
 - **A code can be re-bound within a year.** A discontinued patrol's remaining scouts are
@@ -627,6 +630,11 @@ the `prd` skill if a change needs a spec first.
   publisher/writer/reader, `Consumes()` + `HandleMessage` folding events
   idempotently, reads in `query.go` behind a small interface, schema embedded from
   `table.sql`. Do not add new packages in the legacy shape.
+- **A `HandleMessage` must be idempotent.** Projections are rebuilt by replaying the whole
+  stream on every boot, so a create must survive being handled twice: upsert
+  (`ON DUPLICATE KEY UPDATE`), never a bare `INSERT`. Two copied packages got this wrong and
+  dead-lettered every row on every restart while still looking correct — see
+  *Known deviations*.
 - The **legacy** shape, still used by `qr`, `scan`, `patrulje`, `klan`, `senior`,
   `personnel`: `table.go` (row struct, `New`, embedded schema), `consumer.go`
   (`Consumes()` + `HandleMessage`), `query.go`/`querier.go`, `filter.go`,
