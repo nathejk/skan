@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/nathejk/table/klan"
@@ -79,6 +80,10 @@ type PhotoCoverInterface interface {
 type KortInterface interface {
 	SpejderSheets(ctx context.Context, year string) ([]KortSheet, error)
 	IsSpejderSheet(ctx context.Context, year, id string) (bool, error)
+
+	// SheetForScanner is the sheet handed out at the post this scanner mans, if there is
+	// exactly one. found=false is ordinary: most scanners do not man a handout post.
+	SheetForScanner(ctx context.Context, year, userID string, at time.Time) (KortSheet, bool, error)
 }
 
 // Models is the read side as handlers see it: one interface per projection this

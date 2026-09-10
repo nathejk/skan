@@ -1,13 +1,16 @@
 # 019 — Assume the map when the scanner mans a handout post
 
-**Status:** open
+**Status:** done
 **Priority:** medium
 **Created:** 2026-09-10
-**Picked up by:**
-**Started:**
-**Completed:**
+**Picked up by:** Zed agent
+**Started:** 2026-09-10
+**Completed:** 2026-09-10
 
-**Blocked on:** three projections this service does not have — see below.
+**Resolved:** HQ copied in `checkpoint` and `checkpersonnel`, which turned out to be enough
+— no `checkgroup` projection is needed, because `checkpoint.checkgroupId` is the only part
+of a checkgroup this feature has to know. (`kort.Maps()` still cannot run, so
+`data.KortReader` stays.)
 
 ## Description
 
@@ -140,13 +143,13 @@ projections present, `kort.Maps()` works and the narrow reader can probably go a
 
 ## Acceptance Criteria
 
-- [ ] `checkpoint`, `checkgroup` and `checkpersonnel` projections available and wired
-- [ ] A scanner manning a handout post gets that post's sheet assumed, not a picker
-- [ ] A scanner not manning such a post is still asked
-- [ ] The assumed sheet is validated server-side exactly as a chosen one is
-- [ ] The assumption is visible to the scanner rather than silent (pending Q3)
-- [ ] `kort.Maps()` reconsidered now that its dependencies exist
-- [ ] `go test ./...` and `staticcheck` pass in the container
+- [x] `checkpoint` and `checkpersonnel` projections wired (no `checkgroup` needed)
+- [x] A scanner manning a handout post gets that post's sheet preselected
+- [x] A scanner not manning such a post is still asked
+- [x] The assumed sheet is validated server-side exactly as a chosen one is
+- [x] The assumption is visible to the scanner rather than silent
+- [ ] `kort.Maps()` reconsidered — **still not possible**, it also needs a `checkgroup` table
+- [x] `go test ./...` and `staticcheck` pass in the container
 
 ## Progress Log
 
@@ -167,3 +170,44 @@ projections present, `kort.Maps()` works and the narrow reader can probably go a
   but have never been published. So "active as checkpersonnel" currently has no end condition
   in the data, which is the one thing that could make this feature assume a sheet for someone
   who is not at that post tonight.
+- 2026-09-10 09:00 — Picked up: HQ copied in `checkpoint` and `checkpersonnel`. Two
+  useful surprises. `checkpersonnel` has `startUts`/`endUts` columns, so the shift **is**
+  expressible even though no event has yet set one; and no `checkgroup` projection is needed,
+  because the only thing this feature wants from a checkgroup is its id, which
+  `checkpoint.checkgroupId` already carries.
+- 2026-09-10 09:02 — The copied packages needed `nathejk.dk/internal/requestctx`, an hq
+  package that does not exist here — their command sides stamp `Metadata{UserID}`. Wrote a
+  minimal one. It deliberately does **not** reuse `login.User`: `internal/login` →
+  `internal/data` → projection packages → `requestctx` would be an import cycle.
+- 2026-09-10 09:05 — Did the join in `data.KortReader` rather than walking the chain in Go.
+  The copied queriers cannot answer the question anyway — `checkpersonnel.Filter` has no user
+  field — so going through them would mean reading every assignment and filtering here, and
+  the chain is three tables on a page a scanner is waiting for.
+- 2026-09-10 09:06 — Answered the three open questions in the cautious direction, since every
+  wrong answer binds a patrol's code to a map they were not given:
+  **Q1** the shift is honoured when set (`0` means unbounded, which is how every assignment
+  currently looks) and the read is year-scoped regardless, so last year's roster cannot match
+  tonight;
+  **Q2** more than one candidate sheet means no suggestion — `LIMIT 2` so "exactly one" can be
+  told from "several" — and the scanner is asked as before;
+  **Q3** the sheet is **preselected and labelled** ("Foreslået ud fra posten du står på")
+  rather than applied silently. That is one tap saved, still visible, still correctable. A
+  preselected value a scanner cannot account for would be worse than none.
+- 2026-09-10 09:10 — ✅ Verified. With real data there is correctly **no** suggestion: the one
+  2026 assignment is at "Afgang", whose checkgroup no sheet hands out, and its shift is 19
+  September. Injected an assignment putting the test crew user on "Post 1A", whose checkgroup
+  hands out *Skitse CP2*: the picker came back with that sheet `selected` and the reason shown.
+  Then both negative paths, each returning to a plain picker: a shift outside the current time,
+  and a second sheet sharing the post's checkgroup.
+- 2026-09-10 09:12 — **Found a defect in the copied packages, left unfixed by policy.** Both
+  consumers use plain `INSERT`, so every replay re-inserts rows that already exist and
+  dead-letters them: **16 per boot** here (13 checkpoints + 3 assignments). The data stays
+  correct — the first insert won and the values do not change — but it breaks the
+  `cqrs.Consumer` idempotency contract, which exists precisely because projections are
+  rebuilt by replay on every start. The fix upstream is `ON DUPLICATE KEY UPDATE` (or
+  `INSERT IGNORE` if a created event never restates anything). They also build SQL with `%q`,
+  which task 013 removed everywhere else in this repo. **Reported rather than patched**, since
+  a copied package must stay identical to its origin — but note it costs the "zero
+  dead-letters" health signal every other projection here upholds.
+- 2026-09-10 09:12 — Completed. Cleaned up the injected rows and confirmed by replay that the
+  remaining state is stream-derived.

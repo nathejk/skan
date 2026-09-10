@@ -38,10 +38,18 @@
                 <label for="mapId">Hvilket kort får patruljen?</label>
                 <select class="form-control input-lg" id="mapId" name="mapId" required>
                     <option value="">Vælg kort &hellip;</option>
+                    {{ $suggested := .suggestedMapId }}
                     {{ range .maps }}
-                    <option value="{{ .ID }}">{{ .Name }}</option>
+                    <option value="{{ .ID }}"{{ if eq .ID $suggested }} selected{{ end }}>{{ .Name }}</option>
                     {{ end }}
                 </select>
+                {{ if .suggestedMapName }}
+                {{/* Say where the suggestion came from. A preselected value the scanner
+                     cannot account for is worse than no suggestion: they would either
+                     distrust it or accept it without looking. */}}
+                <p><small>Foreslået ud fra posten du står på: <strong>{{ .suggestedMapName }}</strong>.
+                Skift det, hvis patruljen får et andet kort.</small></p>
+                {{ end }}
             </div>
             {{ end }}
 

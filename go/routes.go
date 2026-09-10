@@ -129,18 +129,35 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The sheet this scanner's post hands out, if they man one. Preselected rather than
+	// applied silently: a wrong assumption would bind a patrol's code to a map they were
+	// never given, and the scanner is the only one who can see that it is wrong.
+	suggestedMapID := ""
+	suggestedMapName := ""
+	if user, err := login.UserFromRequest(r); err == nil && user != nil {
+		sheet, found, err := a.models.Kort.SheetForScanner(r.Context(), a.config.year, string(user.ID), time.Now())
+		if err != nil {
+			log.Printf("reading the sheet for scanner %s: %v", user.ID, err)
+		} else if found {
+			suggestedMapID = sheet.ID
+			suggestedMapName = sheet.Name
+		}
+	}
+
 	data := map[string]any{
-		"qrid":         chi.URLParam(r, "id"),
-		"checksum":     chi.URLParam(r, "cs"),
-		"confirm":      false,
-		"team":         team,
-		"photo":        "",
-		"photoRef":     "",
-		"noPhoto":      false,
-		"maps":         spejderMaps,
-		"noMaps":       len(spejderMaps) == 0,
-		"reassign":     reassign,
-		"carriedMapId": carriedMapID,
+		"qrid":             chi.URLParam(r, "id"),
+		"checksum":         chi.URLParam(r, "cs"),
+		"confirm":          false,
+		"team":             team,
+		"photo":            "",
+		"photoRef":         "",
+		"noPhoto":          false,
+		"maps":             spejderMaps,
+		"noMaps":           len(spejderMaps) == 0,
+		"reassign":         reassign,
+		"carriedMapId":     carriedMapID,
+		"suggestedMapId":   suggestedMapID,
+		"suggestedMapName": suggestedMapName,
 	}
 	if team != nil {
 		// The confirmation is only meaningful against the patrol's real photograph, so

@@ -90,6 +90,78 @@ func (r KortReader) SpejderSheets(ctx context.Context, year string) ([]KortSheet
 	return sheets, nil
 }
 
+// SheetForScanner returns the sheet handed out at the post this scanner is manning.
+//
+// # Why this is worth doing
+//
+// A post that hands out sheet 3 hands out sheet 3 all night. Making the crew member pick it
+// from a list every time is friction at exactly the wrong moment — in the dark, with scouts
+// waiting — and every pick is a chance to choose the wrong one, which binds a patrol's code
+// to a map they were not given.
+//
+// The plan already holds the answer: `kort.handoutCheckgroupId` is "the checkgroup whose post
+// gives this sheet to the team", and `checkpersonnel` says which checkpoint a scanner mans.
+//
+// # One query rather than three
+//
+// The chain is scanner → checkpoint → checkgroup → sheet, and walking it in Go would mean
+// three round trips plus filtering, on a page a scanner is waiting for. The copied packages'
+// own queriers cannot answer it anyway: `checkpersonnel.Filter` has no user field, so finding
+// a scanner's assignment through them would mean reading every assignment and filtering here.
+//
+// # found=false is the ordinary case, not a failure
+//
+// Most scanners are not manning a handout post — bandits never are — and then the picker is
+// the right behaviour. So is more than one match: a post configured to hand out several
+// sheets has no single answer, and guessing between them would be worse than asking.
+func (r KortReader) SheetForScanner(ctx context.Context, year, userID string, at time.Time) (KortSheet, bool, error) {
+	if year == "" || userID == "" {
+		return KortSheet{}, false, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	// startUts/endUts of 0 mean "unbounded", which is how every assignment on the stream
+	// currently looks: nothing has ever published a time range, or a removal. So this
+	// tolerates open-ended shifts while still honouring one when it is set — without the
+	// year filter, a crew member who manned a post last year would match tonight.
+	query := `SELECT k.id, k.name
+		FROM checkpersonnel cp
+		JOIN checkpoint c ON c.id = cp.checkpointId AND c.year = cp.year
+		JOIN kort k ON k.handoutCheckgroupId = c.checkgroupId AND k.year = cp.year
+		WHERE cp.userId = ? AND cp.year = ?
+		  AND (cp.startUts = 0 OR cp.startUts <= ?)
+		  AND (cp.endUts = 0 OR cp.endUts >= ?)
+		  AND k.` + spejderSetFilter + `
+		ORDER BY k.sortOrder ASC, k.id ASC
+		LIMIT 2`
+
+	uts := at.Unix()
+	rows, err := r.DB.QueryContext(ctx, query, userID, year, uts, uts, year, string(types.TeamTypePatrulje))
+	if err != nil {
+		return KortSheet{}, false, fmt.Errorf("reading the sheet for scanner %q: %w", userID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	// LIMIT 2 so "exactly one" can be told from "several" without reading the rest.
+	sheets := []KortSheet{}
+	for rows.Next() {
+		var s KortSheet
+		if err := rows.Scan(&s.ID, &s.Name); err != nil {
+			return KortSheet{}, false, fmt.Errorf("scanning suggested sheet: %w", err)
+		}
+		sheets = append(sheets, s)
+	}
+	if err := rows.Err(); err != nil {
+		return KortSheet{}, false, fmt.Errorf("reading the sheet for scanner %q: %w", userID, err)
+	}
+	if len(sheets) != 1 {
+		return KortSheet{}, false, nil
+	}
+	return sheets[0], true, nil
+}
+
 // IsSpejderSheet reports whether a sheet is one a patrulje may be handed.
 //
 // A query rather than a check against a list the caller already has: whether a sheet is

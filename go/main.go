@@ -16,6 +16,8 @@ import (
 	"nathejk.dk/internal/jsonlog"
 	"nathejk.dk/internal/logging"
 	"nathejk.dk/nathejk/commands"
+	"nathejk.dk/nathejk/table/checkpersonnel"
+	"nathejk.dk/nathejk/table/checkpoint"
 	"nathejk.dk/nathejk/table/klan"
 	"nathejk.dk/nathejk/table/kort"
 	"nathejk.dk/nathejk/table/patrulje"
@@ -102,12 +104,21 @@ func main() {
 	// active members, so the column must be fed before it can be trusted.
 	spejderstatustable := spejderstatus.New(nil, sqlw, db.DB())
 
+	// Checkpoints and who mans them. Nil publisher again: hq plans the posts and the
+	// rosters.
+	//
+	// skan reads them for one thing — a scanner standing at a post that hands out maps
+	// should not have to pick the sheet from a list, because the plan already says which
+	// sheet that post gives out.
+	checkpointtable := checkpoint.New(nil, sqlw, db.DB())
+	checkpersonneltable := checkpersonnel.New(nil, sqlw, db.DB())
+
 	// Every schema exists from here on, so failures become recoverable rather than
 	// fatal.
 	sqlw.Arm()
 
 	mux := xstream.NewMux(js)
-	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable, phototable, photocovertable, korttable, spejderstatustable)
+	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable, phototable, photocovertable, korttable, spejderstatustable, checkpointtable, checkpersonneltable)
 	if err := mux.Run(ctx); err != nil {
 		logger.PrintFatal(err, nil)
 	}

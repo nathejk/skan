@@ -117,10 +117,22 @@ choose among them.
   patrol's sheet — a crew sheet would show the scouts checkpoints they should not see yet.
   Several sets may carry the same marking, so it is a filter, not a key.
 - **`kort.Maps()` cannot be used here.** It resolves checkpoint lists and handout posts
-  against the `checkpoint` and `checkgroup` projections, which this service does not run,
-  and fails with `Table 'skan.checkpoint' doesn't exist`. `data.KortReader` asks the
-  narrower question skan has instead. Do not "fix" this by creating those tables empty:
-  `Maps()` would then succeed while reporting every sheet as having no checkpoints.
+  against the `checkpoint` and `checkgroup` projections; skan now has `checkpoint` but still
+  no `checkgroup`, so it fails with `Table 'skan.checkgroup' doesn't exist`.
+  `data.KortReader` asks the narrower questions skan has instead. Do not "fix" this by
+  creating the table empty: `Maps()` would then succeed while reporting every sheet as having
+  no checkpoints.
+- **A scanner manning a handout post gets that post's sheet preselected** (task 019), via
+  `checkpersonnel → checkpoint.checkgroupId → kort.handoutCheckgroupId`. Deliberately
+  conservative: the shift's time range is honoured when set, the read is year-scoped, and
+  **two candidate sheets mean no suggestion at all** rather than a guess. The suggestion is
+  preselected and labelled, never applied silently.
+- **The `checkpoint` and `checkpersonnel` projections are not idempotent.** Both use plain
+  `INSERT`, so every replay re-inserts rows that already exist and dead-letters them — 16 per
+  boot. The data stays correct, but it breaks the `cqrs.Consumer` contract and it means
+  "zero dead-letters" is no longer a clean health signal. Fix belongs upstream in hq
+  (`ON DUPLICATE KEY UPDATE`); they also still build SQL with `%q`. Do not patch them here —
+  a copied package stays identical to its origin.
 - Registering a code **requires** a sheet from the spejder set, validated server-side, and
   the chosen id travels on the `registered` event as `mapId` (`event.QrRegistered`).
 - **A code can be re-bound within a year.** A discontinued patrol's remaining scouts are
@@ -588,10 +600,11 @@ picking up, creating or updating a task.
 | 016 | Map picker replaces the typed-coordinate prompt | medium | **done** | — |
 | 017 | Pick a map from the spejder set when linking a QR code | high | **done** | — |
 | 018 | Discontinued patrol's map may have moved to another team | high | **done** | — |
-| 019 | Assume the map when the scanner mans a handout post | medium | open | needs checkpoint/checkgroup/checkpersonnel projections |
+| 019 | Assume the map when the scanner mans a handout post | medium | **done** | — |
 | 020 | Expected head count + strength-change warning | high | **done** | — |
 
-**Open: 019**, blocked on three hq projections skan does not have.
+**Open: none.** Every filed task is done; see *Known deviations* for what remains
+unresolved by choice.
 
 When you implement one, work the task file as you go rather than retro-filling it, and
 update the *Known deviations* list here once the deviation is actually gone.
