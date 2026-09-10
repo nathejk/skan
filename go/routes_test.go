@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"html/template"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,14 @@ func TestScanResultDataGivesCrewEverything(t *testing.T) {
 // squashSpace collapses whitespace runs so assertions are about wording, not about
 // where the template happens to wrap.
 func squashSpace(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// tagPattern matches HTML tags, so assertions can be written about the words a scanner
+// reads rather than about the markup they are wrapped in — a number inside <strong> is
+// still part of the same sentence.
+var tagPattern = regexp.MustCompile(`<[^>]*>`)
+
+// visibleText renders markup down to the text content, whitespace-normalised.
+func visibleText(s string) string { return squashSpace(tagPattern.ReplaceAllString(s, " ")) }
 
 // TestScanResultRendersWithoutCrewOnlyData renders the real template with a bandit's
 // data. It would have caught the .remark bug: comparing a map key that no handler
@@ -275,5 +284,99 @@ func TestNormalizeSource(t *testing.T) {
 		if got := event.NormalizeSource(tt.in); got != tt.want {
 			t.Errorf("NormalizeSource(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+// TestScanResultShowsExpectedHeadCount covers the count the scanner has to check against
+// the scouts in front of them, and the warning when it no longer matches the armband.
+//
+// A patrol below three cannot continue alone, so its members are reassigned — which means
+// a team can be larger than it started as well as smaller.
+func TestScanResultShowsExpectedHeadCount(t *testing.T) {
+	tests := []struct {
+		name        string
+		startCount  int
+		activeCount int
+		wantWarning bool
+		wantText    string
+	}{
+		{
+			name:       "unchanged strength does not warn",
+			startCount: 5, activeCount: 5,
+			wantWarning: false,
+			wantText:    "Der skal være 5 spejdere",
+		},
+		{
+			name:       "grown by reassignment warns",
+			startCount: 4, activeCount: 7,
+			wantWarning: true,
+			wantText:    "kommet spejdere til fra et hold, der er udgået",
+		},
+		{
+			name:       "shrunk warns",
+			startCount: 6, activeCount: 4,
+			wantWarning: true,
+			wantText:    "Nogle spejdere er stoppet undervejs",
+		},
+		{
+			name:       "a single remaining scout reads as singular",
+			startCount: 5, activeCount: 1,
+			wantWarning: true,
+			wantText:    "Der skal være 1 spejder ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			team := testTeam()
+			team.MemberCount = tt.startCount
+			team.ActiveMemberCount = tt.activeCount
+
+			data := scanResultData(&qr.QR{ID: "7"}, team, "", false, 0, 0)
+			if got := data["expectedCount"]; got != tt.activeCount {
+				t.Fatalf("expectedCount = %v, want %v (current strength, not start count)", got, tt.activeCount)
+			}
+			if got := data["countChanged"]; got != tt.wantWarning {
+				t.Fatalf("countChanged = %v, want %v", got, tt.wantWarning)
+			}
+
+			ts, err := template.ParseFS(fs, "templates/base.html", "templates/coordinates.html")
+			if err != nil {
+				t.Fatalf("parsing templates: %v", err)
+			}
+			var out bytes.Buffer
+			if err := ts.ExecuteTemplate(&out, "base", data); err != nil {
+				t.Fatalf("executing template: %v", err)
+			}
+			body := visibleText(out.String())
+
+			if !strings.Contains(body, tt.wantText) {
+				t.Fatalf("output missing %q\n%s", tt.wantText, body)
+			}
+			if warned := strings.Contains(body, "Vær opmærksom"); warned != tt.wantWarning {
+				t.Fatalf("warning shown = %v, want %v", warned, tt.wantWarning)
+			}
+		})
+	}
+}
+
+// TestExpectedHeadCountIsShownToBandits: the head count is not race progress. A bandit is
+// supposed to have caught the whole patrol, so they need it as much as crew do.
+func TestExpectedHeadCountIsShownToBandits(t *testing.T) {
+	team := testTeam()
+	team.MemberCount = 4
+	team.ActiveMemberCount = 7
+
+	data := scanResultData(&qr.QR{ID: "7"}, team, "", true, 0, 99)
+
+	if got := data["expectedCount"]; got != 7 {
+		t.Fatalf("expectedCount = %v, want 7 for a bandit too", got)
+	}
+	if got := data["countChanged"]; got != true {
+		t.Fatalf("countChanged = %v, want true for a bandit too", got)
+	}
+	// Still no crew-only figure.
+	if _, present := data["scanCount"]; present {
+		t.Fatalf("scanCount reached a bandit: %+v", data)
 	}
 }

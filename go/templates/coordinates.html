@@ -36,6 +36,38 @@
             <img src="{{ .photo }}" alt="Billede af patruljen" class="img-rounded col-md-6">
         </div>
         {{ end }}
+
+        {{/* The head count comes before anything else on this page: the scanner has to
+             check it against the scouts actually standing there, and it is the one thing
+             here they can act on. */}}
+        <div class="panel panel-default" style="margin-top:15px">
+          <div class="panel-body">
+            <p style="font-size:22px;margin:0">
+              Der skal være <strong>{{ .expectedCount }}</strong>
+              {{ if eq .expectedCount 1 }}spejder{{ else }}spejdere{{ end }}
+            </p>
+            <p style="margin:6px 0 0"><small>Tæl dem, og kontakt HQ hvis tallet ikke passer.</small></p>
+          </div>
+        </div>
+
+        {{ if .countChanged }}
+        {{/* The armband shows the number the patrol started with, so once members leave or
+             join, the armband and reality disagree. Say so, rather than letting a scanner
+             count heads against the armband and conclude the wrong thing. */}}
+        <div class="alert alert-warning">
+          <strong>Vær opmærksom:</strong>
+          holdet startede med {{ .startCount }}
+          {{- if eq .startCount 1 }} spejder{{ else }} spejdere{{ end }}, men er nu
+          {{ .expectedCount }}.
+          {{ if gt .expectedCount .startCount }}
+          Der er kommet spejdere til fra et hold, der er udgået.
+          {{ else }}
+          Nogle spejdere er stoppet undervejs.
+          {{ end }}
+          Armnømmeret på ærmet viser stadig {{ .startCount }}.
+        </div>
+        {{ end }}
+
         <p class="lead">Din scanning er registreret</p>
 
         {{/* Counts are as of before this scan: the page loads, then the position is

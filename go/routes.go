@@ -316,6 +316,11 @@ func (a *App) renderLogin(w http.ResponseWriter, r *http.Request, page login.Pag
 // scanner inside a `style="display:hidden"` div; hiding data already delivered to a
 // player's phone is not a boundary.
 //
+// The **member counts are shown to both roles**, and they are not race progress: the
+// scanner has to check that the number of scouts in front of them matches what is
+// registered, and a bandit needs that as much as crew does — more, since they are
+// supposed to have caught the whole patrol.
+//
 // Counts are as of *before* this scan: the page renders first and `PUT /register`
 // records the scan afterwards, so the template wording says "før" and treats zero
 // catches as "first time".
@@ -327,6 +332,19 @@ func scanResultData(qrRow *qr.QR, team *patrulje.Patrulje, photoURL string, isBa
 		"photo":      photoURL,
 		"isBandit":   isBandit,
 		"catchCount": catchCount,
+
+		// How many scouts the scanner should expect to see. This is the patrol's current
+		// strength, not the number it started with: a patrol that drops below three cannot
+		// continue alone, so its remaining members are reassigned to other teams — which
+		// means a team can also be *larger* than it started.
+		"expectedCount": team.ActiveMemberCount,
+		"startCount":    team.MemberCount,
+
+		// Whether to warn that the two differ. The arm marking the scouts wear encodes the
+		// number they *started* with, so once strength changes the armband and reality
+		// disagree — and a scanner counting heads against the armband would otherwise
+		// think something is wrong, or worse, not notice that it is.
+		"countChanged": team.ActiveMemberCount != team.MemberCount,
 	}
 	if !isBandit {
 		data["scanCount"] = scanCount

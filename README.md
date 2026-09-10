@@ -105,6 +105,7 @@ the scouts, or a samarit taping up blisters. **Crew see everything.**
 | After scanning a patrol | Bandit | Crew |
 |---|---|---|
 | Who the patrol is (name, arm number, photo) | yes | yes |
+| How many scouts to expect | yes | yes |
 | How many times bandits have caught them | yes | yes |
 | Total number of scans, checkpoints included | no | yes |
 | Checkpoint activity and positions | no | yes |
@@ -112,7 +113,19 @@ the scouts, or a samarit taping up blisters. **Crew see everything.**
 A bandit's page is not merely missing those figures — they are never sent to the
 browser, and not even looked up.
 
-### 6. Catching the same patrol twice
+### 6. Counting the scouts
+
+Every scan shows **how many scouts should be there**, and asks the scanner to count them.
+That number is the patrol's current strength, which is not always the number it started
+with: a patrol that drops below three cannot continue alone, so its remaining members are
+reassigned to other teams — meaning a team can grow as well as shrink.
+
+Because the armband the scouts wear shows the number they *started* with, any change leaves
+the armband out of date. When that happens the page adds a yellow *vær opmærksom* note
+saying which way it moved, so nobody counts heads against the armband and draws the wrong
+conclusion.
+
+### 7. Catching the same patrol twice
 
 Bandits do catch the same patrol more than once during a night, so **a rescan
 counts**. To stop accidental double scans from inflating the tally, there's one

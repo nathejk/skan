@@ -15,6 +15,17 @@
         </div>
         <p class="lead"><strong>{{ .armNumber }}. {{ .team.Name }}</strong></p>
 
+        {{/* Same head count as the scan page: whoever hands over a map is standing in front
+             of the patrol and can count them. */}}
+        <p style="font-size:20px">Der skal være <strong>{{ .team.ActiveMemberCount }}</strong>
+        {{ if eq .team.ActiveMemberCount 1 }}spejder{{ else }}spejdere{{ end }}</p>
+        {{ if ne .team.ActiveMemberCount .team.MemberCount }}
+        <div class="alert alert-warning">
+          <strong>Vær opmærksom:</strong> holdet startede med {{ .team.MemberCount }}, men er nu
+          {{ .team.ActiveMemberCount }}. Armnømmeret viser stadig {{ .team.MemberCount }}.
+        </div>
+        {{ end }}
+
         <form action="" method="post">
             <input type="hidden" name="photoRef" value="{{ .photoRef }}" />
 

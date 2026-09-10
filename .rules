@@ -325,6 +325,7 @@ full picture. **Crew may see everything.**
 | | Bandit | Crew |
 |---|---|---|
 | The patrol's identity, name, photo | yes | yes |
+| **Expected head count** — current strength | yes | yes |
 | `catchCount` — times caught by bandits | yes | yes |
 | Total scan count (all scanners) | **no** | yes |
 | Checkpoint / crew scan activity, positions | **no** | yes |
@@ -332,10 +333,25 @@ full picture. **Crew may see everything.**
 
 Definitions:
 
+- **expected head count** — `patrulje.activeMemberCount`, the patrol's **current** strength.
+  Shown to both roles and shown prominently, because the scanner has to check it against the
+  scouts in front of them. It is not race progress.
 - **`catchCount`** — how many times the patrol has been **caught by bandits**,
   i.e. the number of scans of that patrol whose scanner is a senior. This is the
   one count a bandit is allowed to know.
 - **scan count** — total scans by anyone, crew included. Crew-only.
+
+### Strength changes in both directions
+
+A patrol that falls below **three** members may not continue alone — the rest are reassigned
+to other teams — so a team can be **larger** than it started as well as smaller. Two
+consequences:
+
+- "Expected" must be `activeMemberCount`, never `memberCount` (the start roster).
+- The **armband encodes the start count** (`armNumber` is `teamNumber-memberCount`), so once
+  strength changes the armband is permanently out of date. That is why a difference gets a
+  yellow *vær opmærksom* note naming the direction (task 020): without it a scanner counting
+  heads against the armband draws the wrong conclusion either way.
 
 When adding anything to the scan-result page, decide which column of that table it
 belongs in *before* writing the handler. Default to crew-only if unsure.
@@ -573,6 +589,7 @@ picking up, creating or updating a task.
 | 017 | Pick a map from the spejder set when linking a QR code | high | **done** | — |
 | 018 | Discontinued patrol's map may have moved to another team | high | **done** | — |
 | 019 | Assume the map when the scanner mans a handout post | medium | open | needs checkpoint/checkgroup/checkpersonnel projections |
+| 020 | Expected head count + strength-change warning | high | **done** | — |
 
 **Open: 019**, blocked on three hq projections skan does not have.
 
