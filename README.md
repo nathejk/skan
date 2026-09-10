@@ -76,6 +76,12 @@ The list offers only the sheets that are **handed over at a scan**. Sheets a par
 checkpoint gives out are that post's business, and the hand-drawn sketches carry no QR code at
 all, so neither can be the sheet whose sticker is being bound.
 
+Maps are also given out **in order**, because each sheet reveals the next stretch of the
+route. A patrol with no code registered for Deltagerkort 1 cannot be given Deltagerkort 2: the
+sheets beyond their next one are listed but greyed out, and the one they are due is
+preselected. Sheets they already have stay selectable and marked *(udleveret)*, since a map
+that gets torn or lost is replaced with a fresh sticker for the same sheet.
+
 If the scanner is on duty at a checkpoint where maps are handed out, that checkpoint's
 sheet is preselected for them. It is only ever a suggestion: if the duty roster leaves
 any doubt about which sheet is being handed over, nothing is preselected and the scanner
@@ -353,5 +359,5 @@ than writing to the database directly.
 
 Work is tracked on a file-based board in `roadmap/tasks/` — `open/`, `doing/` and
 `done/` folders holding one Markdown file per task, with the conventions in
-`roadmap/tasks/TASKS.md`. All 24 filed tasks are done and `open/` is currently empty;
+`roadmap/tasks/TASKS.md`. All 25 filed tasks are done and `open/` is currently empty;
 the gaps listed above are open by choice, not by oversight.

@@ -51,12 +51,22 @@
             <div class="form-group" style="text-align:left">
                 <label for="mapId">Hvilket kort får patruljen?</label>
                 <select class="form-control input-lg" id="mapId" name="mapId" required>
+                    {{/* Sheets are handed out in order along the route, so anything past the
+                         patrol's next one is listed but disabled: a scanner looking for
+                         "Deltagerkort 3" needs to see that it exists and is not due yet,
+                         rather than wonder whether the list is broken. */}}
                     <option value="">Vælg kort &hellip;</option>
-                    {{ $suggested := .suggestedMapId }}
+                    {{ $next := .nextMapId }}
                     {{ range .maps }}
-                    <option value="{{ .ID }}"{{ if eq .ID $suggested }} selected{{ end }}>{{ .Name }}</option>
+                    <option value="{{ .ID }}"{{ if eq .ID $next }} selected{{ end }}{{ if not .Reachable }} disabled{{ end }}>{{ .Name }}{{ if .Held }} (udleveret){{ else if not .Reachable }} (ikke nået endnu){{ end }}</option>
                     {{ end }}
                 </select>
+                {{ if .allMapsHandedOut }}
+                {{/* Nothing is preselected in this state, so say why rather than leaving the
+                     scanner to work out what an empty picker means. */}}
+                <p><small>Patruljen har fået alle kortene. Vælg kun et kort her, hvis de har
+                mistet et og får det igen.</small></p>
+                {{ end }}
                 {{ if .suggestedMapName }}
                 {{/* Say where the suggestion came from. A preselected value the scanner
                      cannot account for is worse than no suggestion: they would either

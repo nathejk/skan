@@ -19,6 +19,86 @@ func (a *App) spejderSheets(ctx context.Context) ([]data.KortSheet, error) {
 	return a.models.Kort.SpejderSheets(ctx, a.config.year)
 }
 
+// SheetOption is one entry in the map picker: a sheet, and whether it may be chosen yet.
+type SheetOption struct {
+	ID   string
+	Name string
+
+	// Held: the patrulje already has a QR code registered for this sheet.
+	Held bool
+
+	// Reachable: this sheet may be handed over now. Unreachable ones are still listed,
+	// disabled — a scanner looking for "Deltagerkort 3" needs to see that it exists and is
+	// not yet due, rather than wonder whether the list is broken.
+	Reachable bool
+}
+
+// sheetsInReach applies the handout order to a year's sheets.
+//
+// # The rule
+//
+// Maps are given out in sequence along the route, and each sheet reveals the next stretch of
+// it. A patrol that has not been given sheet 1 cannot be given sheet 2 — so a sheet is
+// reachable only if the patrol already holds it, or it is the **first** one they do not hold.
+// The default selection is that first missing sheet, because it is what the scanner is about
+// to hand over in all but exceptional cases.
+//
+// # Why held sheets stay reachable
+//
+// A map gets torn, soaked or lost, and a replacement carries a new sticker for the same
+// sheet. Refusing that would leave the scanner unable to record a handover that really
+// happened. It also makes a gap in the sequence recoverable: if a patrol somehow holds 1 and
+// 3, the reachable set is {1, 3, 2} rather than a dead end.
+//
+// The order of `sheets` is the handout order (`kort.sortOrder`) and is preserved.
+func sheetsInReach(sheets []data.KortSheet, held map[string]bool) ([]SheetOption, string) {
+	options := make([]SheetOption, 0, len(sheets))
+	next := ""
+	for _, s := range sheets {
+		isHeld := held[s.ID]
+		// The first sheet the patrol does not hold, and only that one, extends their reach.
+		if !isHeld && next == "" {
+			next = s.ID
+		}
+		options = append(options, SheetOption{
+			ID:        s.ID,
+			Name:      s.Name,
+			Held:      isHeld,
+			Reachable: isHeld || s.ID == next,
+		})
+	}
+	// next == "" means the patrol holds every sheet there is. Nothing is preselected then:
+	// there is no next map to hand over, and picking one is a replacement — a deliberate
+	// act, not a default.
+	return options, next
+}
+
+// sheetReachable reports whether a chosen sheet may be handed over to a patrulje now.
+//
+// The same rule as sheetsInReach, asked about one id, for the server-side check on submit.
+func sheetReachable(sheets []data.KortSheet, held map[string]bool, id string) bool {
+	if id == "" {
+		return false
+	}
+	options, _ := sheetsInReach(sheets, held)
+	for _, o := range options {
+		if o.ID == id {
+			return o.Reachable
+		}
+	}
+	return false
+}
+
+// sheetName resolves a sheet id to its name, for messages. Falls back to the id.
+func sheetName(sheets []data.KortSheet, id string) string {
+	for _, s := range sheets {
+		if s.ID == id {
+			return s.Name
+		}
+	}
+	return id
+}
+
 // offeredSheet reports whether a sheet id is among the sheets on offer.
 //
 // Used to keep a suggestion honest: naming a sheet that is not in the list leaves the

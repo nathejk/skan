@@ -158,8 +158,10 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		"photoRef":         "",
 		"noPhoto":          false,
 		"discontinued":     false,
-		"maps":             spejderMaps,
+		"maps":             []SheetOption{},
 		"noMaps":           len(spejderMaps) == 0,
+		"nextMapId":        "",
+		"allMapsHandedOut": false,
 		"reassign":         reassign,
 		"carriedMapId":     carriedMapID,
 		"suggestedMapId":   suggestedMapID,
@@ -174,6 +176,31 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		data["photo"] = a.coverPhotoURL(r.Context(), team.TeamID)
 		data["confirm"] = ref != "" && (len(spejderMaps) > 0 || carriedMapID != "")
 		data["noPhoto"] = ref == ""
+
+		// Sheets are handed out in order, so which ones this patrulje may be given depends
+		// on what they already hold. Only computable once a team is known, which is why the
+		// picker is built here rather than beside the sheet read above.
+		//
+		// A read failure yields an empty held set, which is the cautious answer in the sense
+		// that matters: it offers only the *first* sheet, so nothing later can be bound by
+		// mistake. The scanner is not blocked outright either.
+		held, err := a.models.QR.MapIDsByTeamNumber(r.Context(), a.config.year, number)
+		if err != nil {
+			log.Printf("reading registered sheets for team %d: %v", number, err)
+			held = map[string]bool{}
+		}
+		options, next := sheetsInReach(spejderMaps, held)
+		data["maps"] = options
+		data["nextMapId"] = next
+		data["allMapsHandedOut"] = next == "" && len(options) > 0
+
+		// The sequence decides the default. A post's suggestion is only worth showing when
+		// it agrees: two competing preselections on one form is how a scanner ends up
+		// recording the sheet the page chose rather than the one in their hand.
+		if suggestedMapID != next {
+			data["suggestedMapId"] = ""
+			data["suggestedMapName"] = ""
+		}
 
 		// A patrulje that has left the race has no active members, so there is nobody in
 		// front of the scanner to hand a map to. Offering the confirmation here would let
@@ -259,6 +286,41 @@ func (a *App) doMapHandler(w http.ResponseWriter, r *http.Request) {
 	if !carried && !a.isSpejderSheet(r.Context(), mapID) {
 		a.registrationRefused(w, r, "Det valgte kort hører ikke til spejdernes kortsæt. Prøv igen, og kontakt HQ hvis det bliver ved.")
 		return
+	}
+
+	// Sheets are handed out in order, and the disabled options on the page are not a
+	// safeguard: a `disabled` attribute is a hint to a browser, and this form can be posted
+	// without one. So the order is enforced here too.
+	//
+	// Skipped for a carried sheet, which is the same physical map moving to another team
+	// rather than a new handover — the new team may well not hold the earlier sheets, and
+	// refusing would strand a map the scouts are already carrying.
+	if !carried {
+		sheets, err := a.spejderSheets(r.Context())
+		if err != nil {
+			log.Printf("reading spejder map sheets: %v", err)
+			a.registrationRefused(w, r, "Kortene kunne ikke læses lige nu. Prøv igen, og kontakt HQ hvis det bliver ved.")
+			return
+		}
+		held, err := a.models.QR.MapIDsByTeamNumber(r.Context(), a.config.year, teamNumber)
+		if err != nil {
+			log.Printf("reading registered sheets for team %d: %v", teamNumber, err)
+			a.registrationRefused(w, r, "Patruljens kort kunne ikke læses lige nu. Prøv igen, og kontakt HQ hvis det bliver ved.")
+			return
+		}
+		if !sheetReachable(sheets, held, mapID) {
+			// Name the sheet that is actually due: "wrong one" without "this one instead"
+			// leaves a scanner guessing in the dark.
+			_, next := sheetsInReach(sheets, held)
+			message := "Patruljen får kortene i rækkefølge, og " + sheetName(sheets, mapID) + " er ikke næste kort."
+			if next != "" {
+				message += " Patruljen mangler " + sheetName(sheets, next) + " først."
+			} else {
+				message += " Patruljen har allerede fået alle kortene."
+			}
+			a.registrationRefused(w, r, message+" Kontakt HQ hvis det ikke passer.")
+			return
+		}
 	}
 
 	if err := a.commands.QR.Register(qrID, *team, *user, mapID); err != nil {

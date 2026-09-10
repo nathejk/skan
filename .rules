@@ -158,6 +158,18 @@ choose among them.
   sheet *by* its handout post, so it can only ever return an excluded one. It is guarded by
   `offeredSheet` rather than deleted, pending HQ deciding whether the two features need
   reconciling. Do not remove the guard.
+- **Sheets are handed out in order** (task 025). A sheet is offered only if the patrulje
+  already holds it or it is the **first one they do not** — `sheetsInReach` in `maps.go` is the
+  single definition, and `sheetReachable` asks it about one id for the submit check, because a
+  `disabled` option is a hint to a browser and the form can be posted without one. What a
+  patrulje holds comes from `qr.MapIDsByTeamNumber` (keyed on `teamNumber`: `qr` never learns
+  the team's id; empty `mapId` rows are skipped).
+  Three deliberate details: a **held sheet stays selectable**, because a lost or soaked map is
+  replaced with a new sticker for the same sheet; a **gap is recoverable** rather than a dead
+  end; and out-of-reach sheets are **disabled, not hidden**, so a scanner can see the sheet
+  exists and is not due yet instead of suspecting a broken list. A **carried sheet on a re-bind
+  skips the check** — the receiving team may not hold the earlier sheets, and refusing would
+  strand a map the scouts already carry.
 - Registering a code **requires** a sheet from the spejder set, validated server-side, and
   the chosen id travels on the `registered` event as `mapId` (`event.QrRegistered`).
 - **A code can be re-bound within a year.** A discontinued patrol's remaining scouts are
@@ -698,6 +710,7 @@ picking up, creating or updating a task.
 | 022 | Scan page can hang forever on "Finder position" | high | **done** | 016 |
 | 023 | Remember the scanner's own last position; stop leaking the patrol's | high | **done** | 016 |
 | 024 | Only offer map sheets that are handed out at a QR scan | high | **done** | 017, 019 |
+| 025 | Hand map sheets out in order | high | **done** | 017, 024 |
 
 **Open: none.** Every filed task is done; see *Known deviations* for what remains
 unresolved by choice.

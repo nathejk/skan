@@ -41,6 +41,10 @@ type PersonnelInterface interface {
 }
 type QrInterface interface {
 	GetByID(ctx context.Context, yearSlug string, qrID types.QrID) (*qr.QR, error)
+
+	// MapIDsByTeamNumber is the sheets a patrulje already holds a code for, so maps can
+	// be handed out in order.
+	MapIDsByTeamNumber(ctx context.Context, yearSlug string, teamNumber int) (map[string]bool, error)
 }
 type ScanInterface interface {
 	GetAll(context.Context, scan.Filter) ([]*scan.Scan, error)

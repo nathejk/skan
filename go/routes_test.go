@@ -199,6 +199,11 @@ func (s *stubQR) GetByID(context.Context, string, types.QrID) (*qr.QR, error) {
 	return &qr.QR{ID: "7"}, nil
 }
 
+// Not exercised here: waitForRegistration only reads one code by id.
+func (s *stubQR) MapIDsByTeamNumber(context.Context, string, int) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
 func newWaitApp(stub *stubQR) *App {
 	a := &App{models: data.Models{QR: stub}}
 	a.config.year = "2026"
@@ -389,7 +394,9 @@ func mapPageData(reassign bool) map[string]any {
 		"qrid": "7", "checksum": "123",
 		"confirm": false, "team": nil,
 		"photo": "", "photoRef": "", "noPhoto": false, "discontinued": false,
-		"maps": []data.KortSheet{{ID: "kort-1", Name: "Deltagerkort 1"}}, "noMaps": false,
+		"maps":      []SheetOption{{ID: "kort-1", Name: "Deltagerkort 1", Reachable: true}},
+		"noMaps":    false,
+		"nextMapId": "kort-1", "allMapsHandedOut": false,
 		"reassign": reassign, "carriedMapId": "",
 		"suggestedMapId": "", "suggestedMapName": "",
 	}
@@ -517,6 +524,176 @@ func TestMapPageRefusesADiscontinuedPatrol(t *testing.T) {
 				t.Fatalf("trying another number must keep reassign\n%s", raw)
 			}
 		})
+	}
+}
+
+// TestSheetsInReachFollowTheHandoutOrder covers the sequential handout rule: a patrol that
+// has not been given sheet 1 cannot be given sheet 2, and the sheet they are due is the
+// default.
+func TestSheetsInReachFollowTheHandoutOrder(t *testing.T) {
+	// In handout order, as SpejderSheets returns them.
+	sheets := []data.KortSheet{
+		{ID: "k1", Name: "Deltagerkort 1"},
+		{ID: "k2", Name: "Deltagerkort 2"},
+		{ID: "k3", Name: "Deltagerkort 3"},
+	}
+
+	tests := []struct {
+		name          string
+		held          []string
+		wantReachable []string
+		wantNext      string
+	}{
+		{
+			name:          "a patrol with nothing may only have the first sheet",
+			held:          nil,
+			wantReachable: []string{"k1"},
+			wantNext:      "k1",
+		},
+		{
+			name:          "holding the first opens the second, not the third",
+			held:          []string{"k1"},
+			wantReachable: []string{"k1", "k2"},
+			wantNext:      "k2",
+		},
+		{
+			// A lost or soaked map is replaced, carrying a new sticker for the same sheet.
+			name:          "a held sheet stays available for a replacement",
+			held:          []string{"k1", "k2"},
+			wantReachable: []string{"k1", "k2", "k3"},
+			wantNext:      "k3",
+		},
+		{
+			// A gap must not be a dead end: the missing sheet is what they are due.
+			name:          "a gap in the sequence is recoverable",
+			held:          []string{"k1", "k3"},
+			wantReachable: []string{"k1", "k2", "k3"},
+			wantNext:      "k2",
+		},
+		{
+			name:          "a patrol holding everything has no next sheet",
+			held:          []string{"k1", "k2", "k3"},
+			wantReachable: []string{"k1", "k2", "k3"},
+			wantNext:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			held := map[string]bool{}
+			for _, id := range tt.held {
+				held[id] = true
+			}
+
+			options, next := sheetsInReach(sheets, held)
+
+			if len(options) != len(sheets) {
+				t.Fatalf("got %d options, want all %d listed", len(options), len(sheets))
+			}
+			// Every sheet is listed, in handout order, whether reachable or not.
+			for i, o := range options {
+				if o.ID != sheets[i].ID {
+					t.Fatalf("option %d is %s, want %s: handout order lost", i, o.ID, sheets[i].ID)
+				}
+			}
+
+			got := []string{}
+			for _, o := range options {
+				if o.Reachable {
+					got = append(got, o.ID)
+				}
+			}
+			if strings.Join(got, ",") != strings.Join(tt.wantReachable, ",") {
+				t.Errorf("reachable = %v, want %v", got, tt.wantReachable)
+			}
+			if next != tt.wantNext {
+				t.Errorf("next = %q, want %q", next, tt.wantNext)
+			}
+
+			// The server-side check must agree with the list, or the disabled options are
+			// decoration: the form can be posted without them.
+			for _, o := range options {
+				if sheetReachable(sheets, held, o.ID) != o.Reachable {
+					t.Errorf("sheetReachable(%s) disagrees with the picker", o.ID)
+				}
+			}
+			if sheetReachable(sheets, held, "") {
+				t.Error("no sheet chosen must not pass the order check")
+			}
+			if sheetReachable(sheets, held, "k-unknown") {
+				t.Error("a sheet that is not in the set must not pass the order check")
+			}
+		})
+	}
+}
+
+// TestHeldSheetsAreMarked: a scanner has to be able to see that a patrol already has a
+// sheet, or the only clue that they picked a replacement is that nothing looks wrong.
+func TestHeldSheetsAreMarked(t *testing.T) {
+	options, next := sheetsInReach(
+		[]data.KortSheet{{ID: "k1", Name: "Deltagerkort 1"}, {ID: "k2", Name: "Deltagerkort 2"}},
+		map[string]bool{"k1": true},
+	)
+
+	data := mapPageData(false)
+	data["maps"] = options
+	data["nextMapId"] = next
+	data["team"] = testTeam()
+	data["armNumber"] = "42-5"
+	data["photoRef"] = "ref"
+	data["photo"] = "https://foto/photos/ref"
+	data["confirm"] = true
+
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/map.html")
+	if err != nil {
+		t.Fatalf("parsing templates: %v", err)
+	}
+	var out bytes.Buffer
+	if err := ts.ExecuteTemplate(&out, "base", data); err != nil {
+		t.Fatalf("executing template: %v", err)
+	}
+	raw := out.String()
+
+	if !strings.Contains(raw, `<option value="k1">Deltagerkort 1 (udleveret)</option>`) {
+		t.Errorf("a held sheet should be selectable and marked as handed out\n%s", raw)
+	}
+	if !strings.Contains(raw, `<option value="k2" selected>Deltagerkort 2</option>`) {
+		t.Errorf("the sheet that is due should be preselected\n%s", raw)
+	}
+}
+
+// TestUnreachableSheetsAreDisabled: they stay listed on purpose, so a scanner can see the
+// sheet exists and is not due yet rather than suspect a broken list.
+func TestUnreachableSheetsAreDisabled(t *testing.T) {
+	options, next := sheetsInReach(
+		[]data.KortSheet{{ID: "k1", Name: "Deltagerkort 1"}, {ID: "k2", Name: "Deltagerkort 2"}},
+		nil,
+	)
+
+	data := mapPageData(false)
+	data["maps"] = options
+	data["nextMapId"] = next
+	data["team"] = testTeam()
+	data["armNumber"] = "42-5"
+	data["photoRef"] = "ref"
+	data["photo"] = "https://foto/photos/ref"
+	data["confirm"] = true
+
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/map.html")
+	if err != nil {
+		t.Fatalf("parsing templates: %v", err)
+	}
+	var out bytes.Buffer
+	if err := ts.ExecuteTemplate(&out, "base", data); err != nil {
+		t.Fatalf("executing template: %v", err)
+	}
+	raw := out.String()
+
+	if !strings.Contains(raw, `<option value="k1" selected>Deltagerkort 1</option>`) {
+		t.Errorf("the first sheet should be preselected\n%s", raw)
+	}
+	if !strings.Contains(raw, `<option value="k2" disabled>Deltagerkort 2 (ikke nået endnu)</option>`) {
+		t.Errorf("a sheet out of reach should be listed but disabled\n%s", raw)
 	}
 }
 

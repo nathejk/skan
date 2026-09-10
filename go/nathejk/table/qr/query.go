@@ -45,3 +45,42 @@ func (q *querier) GetByID(ctx context.Context, yearSlug string, qrID types.QrID)
 	}
 	return &r, nil
 }
+
+// MapIDsByTeamNumber is the sheets a patrulje already has a QR code registered for.
+//
+// Used to hand maps out in order: a patrol may only be given the next sheet they do not
+// yet have, so the handler needs to know what they hold.
+//
+// Keyed on teamNumber because that is what this projection stores — `qr` never learns the
+// team's id. Returned as a set, since the order comes from `kort` and two codes for the
+// same sheet is not a distinction worth carrying.
+//
+// Rows with an empty mapId are skipped: codes registered before a sheet was recorded, and
+// codes only ever *found*. Neither says anything about which sheet a patrol holds.
+func (q *querier) MapIDsByTeamNumber(ctx context.Context, yearSlug string, teamNumber int) (map[string]bool, error) {
+	held := map[string]bool{}
+	if yearSlug == "" || teamNumber == 0 {
+		return held, nil
+	}
+
+	query := `SELECT DISTINCT mapId FROM qr
+		WHERE year = ? AND teamNumber = ? AND mapId <> ''`
+
+	rows, err := q.db.QueryContext(ctx, query, yearSlug, teamNumber)
+	if err != nil {
+		return nil, fmt.Errorf("reading registered sheets for team %d: %w", teamNumber, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning registered sheet: %w", err)
+		}
+		held[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading registered sheets for team %d: %w", teamNumber, err)
+	}
+	return held, nil
+}
