@@ -22,7 +22,7 @@ func (q *querier) GetByID(ctx context.Context, yearSlug string, qrID types.QrID)
 	if yearSlug == "" {
 		return nil, tables.ErrRecordNotFound
 	}
-	query := `SELECT id, teamNumber, mapCreatedBy, mapCreatedAt
+	query := `SELECT id, teamNumber, mapCreatedBy, mapCreatedAt, mapId
 		FROM qr
 		WHERE id = ? AND year = ?`
 	var r QR
@@ -32,6 +32,7 @@ func (q *querier) GetByID(ctx context.Context, yearSlug string, qrID types.QrID)
 		&r.TeamNumber,
 		&r.MapCreatedBy,
 		&r.MapCreatedAt,
+		&r.MapID,
 	)
 	r.ID = types.QrID(fmt.Sprintf("%d", id))
 	if err != nil {

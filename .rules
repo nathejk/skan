@@ -123,6 +123,15 @@ choose among them.
   `Maps()` would then succeed while reporting every sheet as having no checkpoints.
 - Registering a code **requires** a sheet from the spejder set, validated server-side, and
   the chosen id travels on the `registered` event as `mapId` (`event.QrRegistered`).
+- **A code can be re-bound within a year.** A discontinued patrol's remaining scouts are
+  reassigned and bring their map, so `qr` folds with `ON DUPLICATE KEY UPDATE` (task 018)
+  and the last registration wins. The guard against a careless re-point is the photo
+  confirmation, plus the fact that the re-bind screen is only reachable when the current
+  team is discontinued.
+- **"Discontinued" is a merge, not a signup status.** The stream carries no
+  `patrulje.*.status.changed` at all — `patrulje.mergedIntoTeamId` (from
+  `patrulje.*.merged`) is the signal, and `Patrulje.Discontinued()` is where that rule
+  lives. Nothing publishes merges yet, so the fold is correct but dormant.
 
 ### Event bodies this service extends (`nathejk/event`)
 
@@ -138,7 +147,22 @@ so consumers decoding into the shared bodies are unaffected:
 All three should be **upstreamed into `shared-go`** so hq and the map tooling can rely on
 them. `event.SeniorUpdated` is a different case: it *restores* a `teamId` that shared-go
 dropped while publishers kept sending it — that one is a bug to fix upstream, not a field
-to add.
+to add. Note **only the first `senior.updated` carries `teamId`** (that event is really
+"senior added", and a senior may not change klan), so a consumer must treat an empty value
+as "not stated" and keep what it knows — never as "no klan".
+
+### Finding out what the stream actually contains
+
+Before adding a subscription on a guess, list the subjects:
+
+```sh
+docker run --rm --network jetstream natsio/nats-box:latest \
+  nats -s nats://jetstream:4222 stream subjects NATHEJK
+```
+
+This repo has twice wasted a replay cycle guessing at subjects that do not exist — there
+are no `patrulje.*.status.changed` and no merge events, though `klan.*.status.changed`
+exists, which makes the absence easy to misread.
 
 ### Event subjects
 
@@ -432,7 +456,8 @@ Everything runs in containers — never run `go` on the host. One-offs:
 
 Tables are created on boot with `CREATE TABLE IF NOT EXISTS`, so **adding a
 column to a `table.sql` does nothing where the table already exists** — drop the
-table (or the DB) in dev.
+table (or the DB) in dev. Note also that a replay **upserts rather than truncating**: a
+hand-edited row survives a restart and only disappears once the table is dropped.
 
 ---
 
@@ -531,9 +556,10 @@ picking up, creating or updating a task.
 | 015 | Registration redirect races the projection | medium | **done** | — |
 | 016 | Map picker replaces the typed-coordinate prompt | medium | **done** | — |
 | 017 | Pick a map from the spejder set when linking a QR code | high | **done** | — |
+| 018 | Discontinued patrol's map may have moved to another team | high | **done** | — |
+| 019 | Assume the map when the scanner mans a handout post | medium | open | needs checkpoint/checkgroup/checkpersonnel projections |
 
-**Open: none.** Every filed task is done; see *Known deviations* for what remains
-unresolved by choice.
+**Open: 019**, blocked on three hq projections skan does not have.
 
 When you implement one, work the task file as you go rather than retro-filling it, and
 update the *Known deviations* list here once the deviation is actually gone.

@@ -34,7 +34,14 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 			(memberId, year, teamId, name, address, postalCode, city, email, phone, birthday, tshirtSize, diet,  createdAt, updatedAt)
 			VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
 			ON DUPLICATE KEY UPDATE
-			teamId=VALUES(teamId), name=VALUES(name), address=VALUES(address), postalCode=VALUES(postalCode),city=VALUES(city), email=VALUES(email), phone=VALUES(phone), birthday=VALUES(birthday), tshirtSize=VALUES(tshirtSize), diet=VALUES(diet), updatedAt=VALUES(updatedAt)`
+			-- teamId is set once and never cleared. Only the first senior.updated for a
+			-- member carries it — that event is really "senior added" — and a senior may not
+			-- change their klan, so later events omit the field on the grounds that an
+			-- unchangeable value need not be repeated. Folding it with VALUES(teamId) would
+			-- therefore overwrite a real klan with "" on the next edit of a name or t-shirt
+			-- size, silently costing every bandit in that klan its LOK label.
+			teamId=IF(VALUES(teamId) = '', teamId, VALUES(teamId)),
+			name=VALUES(name), address=VALUES(address), postalCode=VALUES(postalCode),city=VALUES(city), email=VALUES(email), phone=VALUES(phone), birthday=VALUES(birthday), tshirtSize=VALUES(tshirtSize), diet=VALUES(diet), updatedAt=VALUES(updatedAt)`
 		args := []any{
 			tables.Quote(string(body.MemberID)),
 			tables.Quote(msg.Subject().Parts()[1]),

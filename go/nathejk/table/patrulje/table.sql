@@ -16,5 +16,16 @@ CREATE TABLE IF NOT EXISTS patrulje (
     contactEmail VARCHAR(99) NOT NULL DEFAULT "",
     contactRole VARCHAR(99) NOT NULL DEFAULT "",
     signupStatus VARCHAR(9) NOT NULL DEFAULT "",
+    -- The team this one was merged into, or "" while it is still running.
+    --
+    -- A merge is how a patrol leaves the race: members quit, and whoever is left joins
+    -- another team. Non-empty therefore means "discontinued", which matters when a code is
+    -- scanned — the map may have travelled with the reassigned scouts, so the scan must
+    -- not be credited to a team that is no longer running.
+    --
+    -- Kept as its own column rather than folded into signupStatus, which `.started` also
+    -- writes: the two facts are independent, and a merged team that had already started
+    -- would otherwise lose one of them.
+    mergedIntoTeamId VARCHAR(99) NOT NULL DEFAULT "",
     PRIMARY KEY (teamId)
 );

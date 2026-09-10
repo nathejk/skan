@@ -118,16 +118,29 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("reading spejder map sheets: %v", mapsErr)
 	}
 
+	// Re-binding a code whose patrol has left the race. The sheet is the same physical
+	// piece of paper — the scouts carried it to their new team — so it is carried over
+	// rather than asked for again, and only the team number is in question.
+	reassign := r.URL.Query().Get("reassign") != ""
+	carriedMapID := ""
+	if reassign {
+		if existing, err := a.models.QR.GetByID(r.Context(), a.config.year, types.QrID(chi.URLParam(r, "id"))); err == nil {
+			carriedMapID = existing.MapID
+		}
+	}
+
 	data := map[string]any{
-		"qrid":     chi.URLParam(r, "id"),
-		"checksum": chi.URLParam(r, "cs"),
-		"confirm":  false,
-		"team":     team,
-		"photo":    "",
-		"photoRef": "",
-		"noPhoto":  false,
-		"maps":     spejderMaps,
-		"noMaps":   len(spejderMaps) == 0,
+		"qrid":         chi.URLParam(r, "id"),
+		"checksum":     chi.URLParam(r, "cs"),
+		"confirm":      false,
+		"team":         team,
+		"photo":        "",
+		"photoRef":     "",
+		"noPhoto":      false,
+		"maps":         spejderMaps,
+		"noMaps":       len(spejderMaps) == 0,
+		"reassign":     reassign,
+		"carriedMapId": carriedMapID,
 	}
 	if team != nil {
 		// The confirmation is only meaningful against the patrol's real photograph, so
@@ -136,7 +149,7 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		data["armNumber"] = fmt.Sprintf("%s-%d", team.TeamNumber, team.MemberCount)
 		data["photoRef"] = ref
 		data["photo"] = a.coverPhotoThumbURL(r.Context(), team.TeamID)
-		data["confirm"] = ref != "" && len(spejderMaps) > 0
+		data["confirm"] = ref != "" && (len(spejderMaps) > 0 || carriedMapID != "")
 		data["noPhoto"] = ref == ""
 	}
 
@@ -191,7 +204,15 @@ func (a *App) doMapHandler(w http.ResponseWriter, r *http.Request) {
 		a.registrationRefused(w, r, "Vælg hvilket kort patruljen får, før du tilknytter QR-koden.")
 		return
 	}
-	if !a.isSpejderSheet(r.Context(), mapID) {
+	// A carried-over sheet is accepted as it stands. On a re-bind the scanner is not
+	// choosing a sheet — the scouts already hold it — so requiring it to still be in the
+	// current spejder set would refuse a legitimate hand-over just because the sheet was
+	// since retired from the set.
+	carried := false
+	if existing, err := a.models.QR.GetByID(r.Context(), a.config.year, qrID); err == nil {
+		carried = existing.MapID != "" && existing.MapID == mapID
+	}
+	if !carried && !a.isSpejderSheet(r.Context(), mapID) {
 		a.registrationRefused(w, r, "Det valgte kort hører ikke til spejdernes kortsæt. Prøv igen, og kontakt HQ hvis det bliver ved.")
 		return
 	}
@@ -336,6 +357,18 @@ func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 	patrulje, err := a.models.Patrulje.GetByNumber(r.Context(), a.config.year, qr.TeamNumber)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("No patrulje found %#v", err), http.StatusFailedDependency)
+		return
+	}
+
+	// A discontinued patrol's map may be in someone else's hands: when a patrol leaves the
+	// race its remaining scouts are reassigned to another team, and they bring their map.
+	// So this code no longer reliably identifies who is standing here — ask, rather than
+	// crediting a scan to a team that is no longer running.
+	//
+	// Asking rather than following the merge: the map may have gone to any of the teams the
+	// scouts were split across, and only the person holding it can say.
+	if patrulje.Discontinued() {
+		http.Redirect(w, r, fmt.Sprintf("/map/%s/%d?reassign=1", qrID, cs), http.StatusSeeOther)
 		return
 	}
 

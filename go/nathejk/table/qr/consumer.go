@@ -32,12 +32,28 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if len(parts) < 2 {
 			return fmt.Errorf("qr: subject %q has no year", msg.Subject().Subject())
 		}
-		// INSERT IGNORE, so the first binding within a year wins. A later scanner
-		// cannot silently re-point a map that is already in play; correcting a
-		// mis-registration is an HQ job, not something a repeat POST can do.
+		// ON DUPLICATE KEY UPDATE, not INSERT IGNORE: a code can legitimately be bound
+		// again within a year.
+		//
+		// Task 014 deliberately chose "first binding wins", reasoning that a later scanner
+		// should not be able to re-point a map already in play. That reasoning was
+		// incomplete: when a patrol is discontinued, its remaining scouts are reassigned to
+		// another team and take their map with them, so the same physical sheet genuinely
+		// changes hands. Refusing the second binding would leave every later scan of that
+		// map credited to a team that has left the race — worse than the problem the
+		// original choice avoided.
+		//
+		// The protection now lives where it can judge: registration requires the photo of
+		// the team in front of the scanner, and re-binding is only offered when the current
+		// team is actually discontinued.
 		sql := fmt.Sprintf(
-			"INSERT IGNORE INTO qr SET year=%s, id=%s, teamNumber=%s, mapCreatedBy=%s, "+
-				"mapCreatedAt=%s, mapId=%s",
+			"INSERT INTO qr SET year=%s, id=%s, teamNumber=%s, mapCreatedBy=%s, "+
+				"mapCreatedAt=%s, mapId=%s "+
+				"ON DUPLICATE KEY UPDATE teamNumber=VALUES(teamNumber), "+
+				"mapCreatedBy=VALUES(mapCreatedBy), mapCreatedAt=VALUES(mapCreatedAt), "+
+				// The sheet is restated on a re-bind, and an empty value must not erase a
+				// known one — the same rule as senior.teamId.
+				"mapId=IF(VALUES(mapId) = '', mapId, VALUES(mapId))",
 			tables.Quote(parts[1]),
 			tables.Quote(string(body.QrID)),
 			tables.Quote(body.TeamNumber),

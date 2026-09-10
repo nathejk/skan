@@ -26,7 +26,18 @@ type Patrulje struct {
 	TshirtCount  int                `json:"tshirtCount"`
 	SignupStatus types.SignupStatus `json:"signupStatus"`
 	PaidAmount   int                `json:"paidAmount"`
+
+	// MergedIntoTeamID is the team this one was merged into, or "" while it is still
+	// running. A merge is how a patrol leaves the race.
+	MergedIntoTeamID types.TeamID `json:"mergedIntoTeamId,omitempty"`
 }
+
+// Discontinued reports whether the patrol has left the race.
+//
+// A method so the rule is written once: "discontinued" is a merge into another team, not
+// a signup status — the stream carries no patrulje status change for it. Its remaining
+// members were reassigned, and they may well have taken their map with them.
+func (p Patrulje) Discontinued() bool { return p.MergedIntoTeamID != "" }
 
 type table struct {
 	consumer

@@ -2,7 +2,11 @@
 
 {{define "content"}}
     <div class="starter-template">
-        <h1>Tilknyt patrulje</h1>
+        <h1>{{ if .reassign }}Hvem har kortet nu?{{ else }}Tilknyt patrulje{{ end }}</h1>
+        {{ if .reassign }}
+        <p class="lead">Patruljen der havde dette kort er udgået af løbet. Hvis spejderne
+        er kommet med på et andet hold, skal kortet overføres til det nye holdnummer.</p>
+        {{ end }}
         {{ if .confirm }}
         <p class="lead">Er dette patruljen der står foran dig?</p>
         <div class="row">
@@ -14,6 +18,11 @@
         <form action="" method="post">
             <input type="hidden" name="photoRef" value="{{ .photoRef }}" />
 
+            {{ if .carriedMapId }}
+            {{/* A re-bind: the scouts already carry the sheet, so it travels with them
+                 rather than being chosen again. */}}
+            <input type="hidden" name="mapId" value="{{ .carriedMapId }}" />
+            {{ else }}
             <div class="form-group" style="text-align:left">
                 <label for="mapId">Hvilket kort får patruljen?</label>
                 <select class="form-control input-lg" id="mapId" name="mapId" required>
@@ -23,6 +32,7 @@
                     {{ end }}
                 </select>
             </div>
+            {{ end }}
 
             <p>Tjek billedet grundigt. Når du bekræfter, bliver QR-koden på kortet bundet til
             denne patrulje for resten af løbet.</p>

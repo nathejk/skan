@@ -17,6 +17,10 @@ type QR struct {
 	TeamNumber   int          `json:"teamNumber"`
 	MapCreatedAt time.Time    `json:"mapCreatedAt"`
 	MapCreatedBy string       `json:"mapCreatedBy"`
+
+	// MapID is the kort sheet handed over with this code, or "" for codes registered
+	// before the sheet was recorded — which means "unknown sheet", not "no sheet".
+	MapID string `json:"mapId,omitempty"`
 }
 
 type table struct {

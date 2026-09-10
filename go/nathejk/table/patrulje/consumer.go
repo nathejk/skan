@@ -20,6 +20,14 @@ func (c *consumer) Consumes() (subjs []cqrs.Subject) {
 		cqrs.SubjectFromStr("NATHEJK:*.patrulje.*.updated"),
 		cqrs.SubjectFromStr("NATHEJK:*.patrulje.*.numberassigned"),
 		cqrs.SubjectFromStr("NATHEJK:*.patrulje.*.started"),
+		// Needed to know a patrol has left the race. A discontinued patrol's map may have
+		// travelled to another team — members quit and the remainder are reassigned,
+		// bringing their old map — so a scan of its code must ask who holds it now rather
+		// than crediting a team that is no longer running.
+		cqrs.SubjectFromStr("NATHEJK:*.patrulje.*.status.changed"),
+		// A merge is how a patrol leaves the race, and the signal that its map may now be
+		// in someone else's hands.
+		cqrs.SubjectFromStr("NATHEJK:*.patrulje.*.merged"),
 	}
 }
 
@@ -103,6 +111,37 @@ func (c *consumer) HandleMessage(msg cqrs.Message) error {
 		if err := c.w.Consume(sql); err != nil {
 			return err
 		}
+	case msg.Subject().Match("NATHEJK.*.patrulje.*.status.changed"):
+		var body messages.NathejkPatruljeStatusChanged
+		if err := msg.Body(&body); err != nil {
+			return err
+		}
+		// Only the status: memberCount is not restated here, and the `.started` handler
+		// owns it.
+		sql := fmt.Sprintf("UPDATE patrulje SET signupStatus=%s WHERE teamId=%s",
+			tables.Quote(string(body.Status)),
+			tables.Quote(string(body.TeamID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
+			return err
+		}
+
+	case msg.Subject().Match("NATHEJK.*.patrulje.*.merged"):
+		var body messages.NathejkTeamMerged
+		if err := msg.Body(&body); err != nil {
+			return err
+		}
+		if body.TeamID == "" {
+			return nil
+		}
+		sql := fmt.Sprintf("UPDATE patrulje SET mergedIntoTeamId=%s WHERE teamId=%s",
+			tables.Quote(string(body.ParentTeamID)),
+			tables.Quote(string(body.TeamID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
+			return err
+		}
+
 	default:
 		log.Printf("Unhandled message %q", msg.Subject().Subject())
 
