@@ -98,6 +98,11 @@ position is saved and flagged as manually set. A hand-placed marker is never mis
 for a GPS fix, and carries no accuracy figure, because there is no measurement behind
 it.
 
+That map opens on **the last position this scanner reported**, remembered on their phone. A
+scanner hardly moves all night — a checkpoint stays where it is, a bandit works a lok — so
+it beats panning across Denmark in the dark, and it is their own information rather than
+anything about the patrol.
+
 ### 4. Logging in
 
 Scanning is not anonymous. A visitor without a session is asked for their phone
@@ -132,7 +137,9 @@ the scouts, or a samarit taping up blisters. **Crew see everything.**
 | Checkpoint activity and positions | no | yes |
 
 A bandit's page is not merely missing those figures — they are never sent to the
-browser, and not even looked up.
+browser, and not even looked up. That applies to values that are never *displayed* too: the
+fallback map used to be centred on where the patrol was last scanned, for both roles, which
+handed a bandit a hunting hint in two invisible numbers.
 
 ### 6. Counting the scouts
 
@@ -342,5 +349,5 @@ than writing to the database directly.
 
 Work is tracked on a file-based board in `roadmap/tasks/` — `open/`, `doing/` and
 `done/` folders holding one Markdown file per task, with the conventions in
-`roadmap/tasks/TASKS.md`. All 21 filed tasks are done and `open/` is currently empty;
+`roadmap/tasks/TASKS.md`. All 23 filed tasks are done and `open/` is currently empty;
 the gaps listed above are open by choice, not by oversight.

@@ -466,6 +466,11 @@ and `internal/login.User.IsBandit()` is the only source of the role. Two rules:
   and hide them in markup — the pre-port page did that with a `display:hidden` div, and
   data on a player's phone is data they have.
 - Do not even *query* a crew-only figure when the scanner is a bandit.
+- **A crew-only value counts even when it is never displayed.** The fallback map used to be
+  centred on the patrol's last known position for both roles (task 023) — two numbers in a
+  `setView` call, invisible on the page, and a hunting hint handed to a bandit who declined
+  geolocation. `scanHandler` now reads `Scan.LatestByTeam` only for crew. When adding
+  anything positional, ask what it is derived from, not whether it is shown.
 
 ---
 
@@ -599,6 +604,13 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   behind it. Scans from before these fields exist carry `""`, which must **not** be read
   as GPS. Both live in `nathejk/event` as additive properties on the shared body — they
   should be upstreamed into `shared-go` so hq and the map tooling can rely on them.
+- **The manual map opens on the scanner's own last reported position**, remembered in a
+  `lastPosition` cookie written on every report, GPS or marker (task 023). A scanner hardly
+  moves all night — a checkpoint stays put, a bandit works a lok — so it is both the best
+  centre available and safe for either role, being their own information. Precedence: own
+  last position → the patrol's last position (**crew only**) → a wide view. The cookie is
+  validated on read, since it is editable and a nonsense pair would break Leaflet with no
+  obvious cause.
 - **`navigator.geolocation` may never call back at all**, so the page carries its own
   15 s watchdog (task 022). A `timeout` option is not enough: the spec stops that clock
   while the permission prompt is unanswered, so a scanner who taps neither allow nor deny
@@ -673,6 +685,7 @@ picking up, creating or updating a task.
 | 020 | Expected head count + strength-change warning | high | **done** | — |
 | 021 | Refuse linking a QR code to a discontinued patrol | high | **done** | 018 |
 | 022 | Scan page can hang forever on "Finder position" | high | **done** | 016 |
+| 023 | Remember the scanner's own last position; stop leaking the patrol's | high | **done** | 016 |
 
 **Open: none.** Every filed task is done; see *Known deviations* for what remains
 unresolved by choice.

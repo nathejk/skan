@@ -25,6 +25,11 @@
         <h1>Hvor er I?</h1>
         <p class="lead">Din telefon kunne ikke finde positionen i tide. Zoom ind og sæt en
         markør, hvor I står.</p>
+        {{/* Say why the map is where it is. A view the scanner cannot account for is worse
+             than a wide one: they would either distrust it or place a marker without
+             looking. Shown by the script, which is what knows whether it applied. */}}
+        <p id="centeredOnLast" style="display:none"><small>Kortet er centreret på den
+        position, du sidst meldte ind. Flyt markøren, hvis du står et andet sted.</small></p>
         <div id="map"></div>
         <button id="savePosition" class="btn btn-primary btn-lg btn-block" disabled>
             Gem position og registrér scanning
@@ -147,10 +152,39 @@ async function put(data, confirmed) {
 
 function register(data) { put(data, false) }
 
+// Where this scanner last reported from, remembered on the device.
+//
+// A scanner reports from roughly the same place all night -- a checkpoint does not move,
+// and a bandit patrols a lok -- so their own last position is by far the best place to open
+// the manual map. It also beats the patrol's last known position for a second reason: it is
+// the scanner's own information, so it is safe to show whoever they are.
+const positionCookie = 'lastPosition'
+
+function rememberPosition(lat, lng) {
+    // One race night. Longer would mean a stale centre from a previous event, and the
+    // first scan of the night refreshes it anyway.
+    document.cookie = positionCookie + '=' + encodeURIComponent(lat + ',' + lng) +
+        ';path=/;max-age=86400;samesite=lax'
+}
+
+// Validated rather than trusted: a cookie is editable, and a nonsense pair here would
+// leave Leaflet with a broken view and no obvious cause.
+function rememberedPosition() {
+    const match = document.cookie.match(/(?:^|;\s*)lastPosition=([^;]*)/)
+    if (!match) { return null }
+    const parts = decodeURIComponent(match[1]).split(',')
+    const lat = parseFloat(parts[0])
+    const lng = parseFloat(parts[1])
+    if (isNaN(lat) || isNaN(lng)) { return null }
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) { return null }
+    return [lat, lng]
+}
+
 function getLocation(pos) {
     // A fix that arrives after the scanner has been sent to the map is too late to act on.
     if (claimed) { return }
     claimed = true
+    rememberPosition(pos.coords.latitude, pos.coords.longitude)
     register({
         latitude: pos.coords.latitude.toString(),
         longitude: pos.coords.longitude.toString(),
@@ -175,14 +209,27 @@ function pickOnMap() {
 
     main.className = 'picking'
 
+    // Precedence: where this scanner last reported from, then the patrol's last known
+    // position (crew only -- it is not sent to a bandit), then a wide view of Denmark.
+    const mine = rememberedPosition()
     const lastLat = parseFloat('{{ .lastLatitude }}')
     const lastLng = parseFloat('{{ .lastLongitude }}')
     const haveLast = !isNaN(lastLat) && !isNaN(lastLng)
 
-    const map = L.map('map').setView(
-        haveLast ? [lastLat, lastLng] : [56.0, 9.5],
-        haveLast ? 14 : 7
-    )
+    let center = [56.0, 9.5]
+    let zoom = 7
+    if (mine) {
+        // Tighter, because it is a position they reported themselves: they are most likely
+        // standing within a few hundred metres of it.
+        center = mine
+        zoom = 16
+        document.getElementById('centeredOnLast').style.display = 'block'
+    } else if (haveLast) {
+        center = [lastLat, lastLng]
+        zoom = 14
+    }
+
+    const map = L.map('map').setView(center, zoom)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap'
@@ -206,6 +253,7 @@ function pickOnMap() {
         main.className = 'working'
         skip.style.display = 'none'
         const at = marker.getLatLng()
+        rememberPosition(at.lat, at.lng)
         register({
             latitude: at.lat.toString(),
             longitude: at.lng.toString(),

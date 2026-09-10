@@ -457,10 +457,22 @@ func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 	// place, so the scanner starts near where they are rather than panning across
 	// Denmark in the dark. Empty when the patrol has never been scanned with a
 	// position, and the template then opens on a wide view.
-	if latest, err := a.models.Scan.LatestByTeam(r.Context(), patrulje.TeamID); err == nil &&
-		latest.Latitude != "" && latest.Longitude != "" {
-		data["lastLatitude"] = latest.Latitude
-		data["lastLongitude"] = latest.Longitude
+	//
+	// **Crew only.** This is the patrol's position as some other scanner — very likely a
+	// checkpoint — last recorded it, which is precisely the race progress a bandit may not
+	// learn. It reached bandits until now, quietly, because it is only used to centre a
+	// fallback map: a bandit who declined geolocation was handed a map already pointed at
+	// wherever the patrol was last seen. Not queried at all for a bandit, per the rule that
+	// a crew-only figure is not merely hidden.
+	//
+	// A bandit's own last reported position is remembered client-side instead (a cookie set
+	// by coordinates.html), which is their own information and a better centre besides.
+	if !user.IsBandit() {
+		if latest, err := a.models.Scan.LatestByTeam(r.Context(), patrulje.TeamID); err == nil &&
+			latest.Latitude != "" && latest.Longitude != "" {
+			data["lastLatitude"] = latest.Latitude
+			data["lastLongitude"] = latest.Longitude
+		}
 	}
 
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
