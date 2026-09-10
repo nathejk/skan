@@ -30,7 +30,14 @@ services:
       # travels in query strings. Real value belongs in docker-compose.override.yml.
       EXPORT_TOKEN: dev-export-token
       JETSTREAM_DSN: "nats://jetstream:4222"
-      DB_DSN: root:ib@tcp(mysql:3306)/skan?parseTime=true
+      # multiStatements is required by the spejderstatus projection, whose table.sql
+      # declares two tables and is consumed as one statement. kort avoids this by
+      # embedding its second schema separately; that package does not.
+      #
+      # Note the trade-off it brings: stacked queries become possible, so a quoting bug in
+      # a consumer would no longer be limited to one statement. Values come from our own
+      # event stream and go through tables.Quote, but that is why the quoting matters.
+      DB_DSN: root:ib@tcp(mysql:3306)/skan?parseTime=true&multiStatements=true
       SMS_DSN: cpsms://TOKEN@api.cpsms.dk
       REDIS_ADDR: redis:6379
       SECRET: nh2025

@@ -27,17 +27,24 @@ type Patrulje struct {
 	SignupStatus types.SignupStatus `json:"signupStatus"`
 	PaidAmount   int                `json:"paidAmount"`
 
-	// MergedIntoTeamID is the team this one was merged into, or "" while it is still
-	// running. A merge is how a patrol leaves the race.
-	MergedIntoTeamID types.TeamID `json:"mergedIntoTeamId,omitempty"`
+	// ActiveMemberCount is how many members are still on the route, maintained by the
+	// spejderstatus projection.
+	ActiveMemberCount int `json:"activeMemberCount"`
 }
 
 // Discontinued reports whether the patrol has left the race.
 //
-// A method so the rule is written once: "discontinued" is a merge into another team, not
-// a signup status — the stream carries no patrulje status change for it. Its remaining
-// members were reassigned, and they may well have taken their map with them.
-func (p Patrulje) Discontinued() bool { return p.MergedIntoTeamID != "" }
+// A started team with no active members left. Both halves matter: a team that has not
+// started yet has no active members either, and calling that "discontinued" would treat
+// every patrol in the hours before the start as having dropped out.
+//
+// A method so the rule is written once, and so the rule can change without every caller
+// changing with it — it has already moved from the deprecated `patruljemerged` encoding to
+// this one. There is deliberately no event for it: the count is recomputed from the member
+// rows, so moving a member back in makes the team active again with no reverse event.
+func (p Patrulje) Discontinued() bool {
+	return p.SignupStatus == types.SignupStatusStarted && p.ActiveMemberCount == 0
+}
 
 type table struct {
 	consumer

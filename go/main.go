@@ -25,6 +25,7 @@ import (
 	"nathejk.dk/nathejk/table/qr"
 	"nathejk.dk/nathejk/table/scan"
 	"nathejk.dk/nathejk/table/senior"
+	"nathejk.dk/nathejk/table/spejderstatus"
 )
 
 // Version gets modified by the ldflags build flag
@@ -92,12 +93,21 @@ func main() {
 	// them — never create or edit one.
 	korttable := kort.New(nil, sqlw, db.DB())
 
+	// Member lifecycle. Also constructed with a **nil publisher**: skan records scans, not
+	// who is still on the route.
+	//
+	// Wired for one reason: this projection maintains patrulje.activeMemberCount, and a
+	// started team with none left is discontinued — which is what tells a scanner that a
+	// map may have moved to another team. Without it every patrol looks like it has zero
+	// active members, so the column must be fed before it can be trusted.
+	spejderstatustable := spejderstatus.New(nil, sqlw, db.DB())
+
 	// Every schema exists from here on, so failures become recoverable rather than
 	// fatal.
 	sqlw.Arm()
 
 	mux := xstream.NewMux(js)
-	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable, phototable, photocovertable, korttable)
+	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable, phototable, photocovertable, korttable, spejderstatustable)
 	if err := mux.Run(ctx); err != nil {
 		logger.PrintFatal(err, nil)
 	}

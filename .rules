@@ -128,10 +128,20 @@ choose among them.
   and the last registration wins. The guard against a careless re-point is the photo
   confirmation, plus the fact that the re-bind screen is only reachable when the current
   team is discontinued.
-- **"Discontinued" is a merge, not a signup status.** The stream carries no
-  `patrulje.*.status.changed` at all — `patrulje.mergedIntoTeamId` (from
-  `patrulje.*.merged`) is the signal, and `Patrulje.Discontinued()` is where that rule
-  lives. Nothing publishes merges yet, so the fold is correct but dormant.
+- **"Discontinued" is a started team with no active members left**:
+  `signupStatus == STARTED && activeMemberCount == 0`, and `Patrulje.Discontinued()` is
+  where that rule lives. Both halves matter — a team that has not started has no active
+  members either. There is deliberately no event for it, and no reverse event: move a member
+  back in and the count makes the team active again.
+- **`patrulje.activeMemberCount` is written by the `spejderstatus` projection**, not by
+  `patrulje`. Deliberate, and documented there: the mux gives no ordering guarantee between
+  consumers, so recomputing the count in `patrulje` could count member rows that had not
+  been written yet. Do not "tidy" it into the owning consumer.
+- Two earlier encodings of discontinuation are **wrong**: there are no
+  `patrulje.*.status.changed` events on the stream at all (though `klan.*.status.changed`
+  exists, which makes the absence easy to misread), and `NathejkTeamMerged` /
+  `patruljemerged` is deprecated — it stored the conclusion rather than the input, which is
+  why it needed `.merged` *and* `.splited`.
 
 ### Event bodies this service extends (`nathejk/event`)
 
@@ -447,7 +457,7 @@ Everything runs in containers — never run `go` on the host. One-offs:
 | `EXPORT_TOKEN` | `dev-export-token` | **Required.** Guards `/qr` and `/geo` as a `?token=` parameter. Never reuse `SECRET` here |
 | `FOTO_BASE_URL` | `https://foto.local.nathejk.dk` | **Required.** Photograph bytes live at `<base>/photos/<ref>` |
 | `JETSTREAM_DSN` | `nats://jetstream:4222` | the local broker on the external `jetstream` network |
-| `DB_DSN` | `root:ib@tcp(mysql:3306)/skan?parseTime=true` | |
+| `DB_DSN` | `root:ib@tcp(mysql:3306)/skan?parseTime=true&multiStatements=true` | `multiStatements` is required by `spejderstatus`, whose `table.sql` declares two tables in one statement. It also enables stacked queries, so consumer quoting matters more — see `tables.Quote` |
 | `SECRET` | `nh2025` | seeds the QR checksum; required. **Never** put this in a URL |
 | *token var for `/qr` + `/geo`* | done (task 002) | `EXPORT_TOKEN`, see above |
 | *foto base URL* | done (task 005) | `FOTO_BASE_URL`, see above |
@@ -506,6 +516,11 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   onto the known set and anything else to `""`, at the edge *and* again in the consumer,
   so a replay does not trust what an older publisher put on the stream. Accuracy is
   parsed to whole metres for the same reason.
+- A copied projection may bring assumptions with it. `spejderstatus` needs
+  `multiStatements=true` in the DSN (its `table.sql` declares two tables and is consumed as
+  one statement, where `kort` embeds its second schema separately), and its test file trips
+  `U1000`, suppressed by a per-package `staticcheck.conf` rather than by editing a file that
+  must stay identical to its origin.
 - Consumers quote SQL values with `tables.Quote`/`tables.Datetime` (task 013). **Never
   use `%q`** — it emits a Go string literal, not a SQL one, and on a `time.Time` it
   invokes the Stringer and writes ` +0000 UTC` into your column.

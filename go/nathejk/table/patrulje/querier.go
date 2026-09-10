@@ -65,7 +65,8 @@ func (q *querier) GetByID(ctx context.Context, teamID types.TeamID) (*Patrulje, 
 		return nil, tables.ErrRecordNotFound
 	}
 
-	query := `SELECT p.teamId, p.teamNumber, p.name, p.groupName, p.korps, p.liga, p.memberCount, p.mergedIntoTeamId
+	query := `SELECT p.teamId, p.teamNumber, p.name, p.groupName, p.korps, p.liga, p.memberCount,
+			p.signupStatus, p.activeMemberCount
 		FROM patrulje p
 		WHERE p.teamId = ?`
 	var p Patrulje
@@ -77,7 +78,8 @@ func (q *querier) GetByID(ctx context.Context, teamID types.TeamID) (*Patrulje, 
 		&p.Korps,
 		&p.Liga,
 		&p.MemberCount,
-		&p.MergedIntoTeamID,
+		&p.SignupStatus,
+		&p.ActiveMemberCount,
 	)
 	if err != nil {
 		switch {

@@ -20,25 +20,39 @@ can say who has it.
 
 ## What "discontinued" is, in this system
 
-Not a signup status. The stream carries **no** `patrulje.*.status.changed` events at all —
-only `signedup`, `updated`, `numberassigned` and `started` (verified by listing the
-stream's subjects). `klan.*.status.changed` does exist, which is what makes the absence
-easy to misread.
+A **started team with no active members left**:
+`signupStatus == STARTED && activeMemberCount == 0`. Both halves matter — a team that has
+not started yet has no active members either, and calling that discontinued would treat
+every patrol in the hours before the start as having dropped out.
 
-It is a **merge**: `NathejkTeamMerged{TeamID, ParentTeamID}`. The pre-012 code agreed —
-`GetDiscontinuedTeamIDs` read a `patruljemerged` table. So `patrulje` gained a
-`mergedIntoTeamId` column, set from `patrulje.*.merged`, and `Patrulje.Discontinued()` is
-the one place that rule is written.
+`activeMemberCount` lives on `patrulje` but is maintained by the **spejderstatus**
+projection, which recomputes it from the member rows next to writing them. That is
+deliberate on its part: the mux gives no ordering guarantee between consumers, so
+recomputing it in `patrulje` could count member rows that had not been written yet and land
+a plausible-looking number that is one out.
 
-**No merge events exist on this stream yet**, so the projection side is correct but
-dormant, and the flow could not be verified from real data. It was verified by injecting
-the state instead — see the log.
+There is deliberately **no event** for discontinuation, and no reverse event: move a member
+back in and the recompute makes the team active again.
+
+### Superseded encodings
+
+Two earlier answers were tried and are wrong:
+
+- `patrulje.*.status.changed` — the stream carries none at all, only `signedup`, `updated`,
+  `numberassigned` and `started`. `klan.*.status.changed` does exist, which makes the
+  absence easy to misread.
+- `NathejkTeamMerged` / the legacy `patruljemerged` table — **deprecated**. It stored the
+  conclusion rather than the input, which is why it needed `.merged` *and* `.splited` to
+  undo itself.
 
 ## Acceptance Criteria
 
-- [x] `patrulje` records a merge, and `Discontinued()` states the rule once
+- [x] Discontinuation is derived from `activeMemberCount` and `signupStatus`, with the rule
+      written once in `Patrulje.Discontinued()`
+- [x] The `spejderstatus` projection is wired, so the count is fed before it is trusted
 - [x] Scanning a discontinued patrol's code asks who holds the map now, in Danish,
       instead of recording a scan against a team that has left the race
+- [x] A running patrol's code still scans normally
 - [x] The scanner enters the new team number and confirms against that team's photograph
 - [x] The map sheet travels with the scouts rather than being chosen again
 - [x] Re-binding a code actually takes effect in the read model
@@ -91,3 +105,31 @@ the state instead — see the log.
   dropped. The read model is disposable, but only if you actually drop it.
 - 2026-09-10 07:40 — Completed. Zero dead-letters, 719 patruljer, and the re-binding persists
   from the real event rather than from my edit.
+- 2026-09-10 08:00 — **Reopened by HQ**: `NathejkTeamMerged` is deprecated, and a
+  `spejderstatus` projection was copied in that maintains `patrulje.activeMemberCount`. A
+  started team with zero active members is discontinued. Removed the `.merged` subscription
+  and the `mergedIntoTeamId` column, and rewrote `Discontinued()` accordingly — the whole
+  point of having put that rule in one method.
+- 2026-09-10 08:05 — Note the copied package writes `patrulje.activeMemberCount` itself,
+  across a package boundary, and documents why: the mux has no ordering guarantee between
+  consumers, so recomputing the count in `patrulje` could read member rows that had not been
+  written yet. The column therefore had to be added to `patrulje/table.sql` for a table this
+  repo owns but another projection fills.
+- 2026-09-10 08:10 — Two integration problems, both from the copied package's assumptions:
+  (1) its `table.sql` declares **two** tables and is consumed as a single statement, which
+  MariaDB rejects — `kort` avoids this by embedding its second schema separately. Fixed by
+  adding `multiStatements=true` to `DB_DSN`, which is presumably what hq runs; flagged in
+  compose that this makes stacked queries possible, so consumer quoting matters more than
+  before.
+  (2) its test file has an unused helper, which staticcheck reports as U1000 and which would
+  fail the production build. Suppressed with a per-package `staticcheck.conf` (`inherit`,
+  minus U1000) rather than editing a file that must stay identical to its origin — `all`
+  turned out to widen the check set and surface an ST1003 naming complaint about a
+  convention every projection here shares.
+- 2026-09-10 08:14 — ✅ Verified against **real data** this time, no injection needed. A clean
+  replay gives 700 `spejderstatus` rows, 1149 log rows and **zero** dead-letters, and 2026
+  has a genuinely discontinued patrol: team 1 "Skjoldungerne 22", `STARTED` with
+  `activeMemberCount = 0`. Scanning its sticker redirects to "Hvem har kortet nu?", while
+  team 2 (`STARTED`, 7 active) still scans straight through to "Din scanning er registreret".
+- 2026-09-10 08:15 — Completed again. The earlier merge-based encoding is gone rather than
+  left dormant, since HQ has deprecated it.
