@@ -697,10 +697,10 @@ func TestUnreachableSheetsAreDisabled(t *testing.T) {
 	}
 }
 
-// TestOfferedSheetKeepsASuggestionHonest: the picker now lists only sheets handed over at a
-// QR scan, while the handout-post suggestion resolves a sheet by its post. A suggestion that
-// is not in the list must be dropped rather than named — pointing a scanner at an option that
-// is not there is worse than saying nothing.
+// TestOfferedSheetKeepsASuggestionHonest: the picker lists only sheets that carry a QR code,
+// while the handout-post suggestion can resolve to a sketch, which carries none. A suggestion
+// that is not in the list must be dropped rather than named — pointing a scanner at an option
+// that is not there is worse than saying nothing.
 func TestOfferedSheetKeepsASuggestionHonest(t *testing.T) {
 	sheets := []data.KortSheet{
 		{ID: "kort-1", Name: "Deltagerkort 1"},
@@ -713,7 +713,7 @@ func TestOfferedSheetKeepsASuggestionHonest(t *testing.T) {
 		want bool
 	}{
 		{"a sheet on offer", "kort-2", true},
-		{"a sheet handed out at a post, so excluded", "kort-skitse", false},
+		{"a sketch, which carries no QR code and is excluded", "kort-skitse", false},
 		{"no suggestion at all", "", false},
 	}
 	for _, tt := range tests {

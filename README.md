@@ -72,9 +72,8 @@ The photograph is shown large enough to actually recognise faces in — roughly 
 thousand pixels wide, not a list thumbnail. It is the identity check, and squinting at
 it is not a check.
 
-The list offers only the sheets that are **handed over at a scan**. Sheets a particular
-checkpoint gives out are that post's business, and the hand-drawn sketches carry no QR code at
-all, so neither can be the sheet whose sticker is being bound.
+The list offers only sheets that **carry a QR code**. The hand-drawn sketches have no sticker
+on them, so there is nothing to bind and nothing for this app to do with them.
 
 Maps are also given out **in order**, because each sheet reveals the next stretch of the
 route. A patrol with no code registered for Deltagerkort 1 cannot be given Deltagerkort 2: the

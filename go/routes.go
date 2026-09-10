@@ -133,10 +133,9 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 	// applied silently: a wrong assumption would bind a patrol's code to a map they were
 	// never given, and the scanner is the only one who can see that it is wrong.
 	//
-	// Now that the picker offers only sheets handed over *at a QR scan*, a suggestion is
-	// kept only if it is actually among them. `SheetForScanner` resolves a sheet by its
-	// handout post, so with the current data it never is — and naming an option that is not
-	// in the list would leave the scanner hunting for it.
+	// Kept only if it is actually among the sheets on offer. A post that hands out sketches
+	// resolves to a sheet with no QR code, which the picker excludes — and naming an option
+	// that is not in the list would leave the scanner hunting for it.
 	suggestedMapID := ""
 	suggestedMapName := ""
 	if user, err := login.UserFromRequest(r); err == nil && user != nil {
@@ -195,8 +194,10 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		data["allMapsHandedOut"] = next == "" && len(options) > 0
 
 		// The sequence decides the default. A post's suggestion is only worth showing when
-		// it agrees: two competing preselections on one form is how a scanner ends up
-		// recording the sheet the page chose rather than the one in their hand.
+		// it agrees: the order is a hard rule, enforced on submit, so a post's sheet that is
+		// not yet due cannot be preselected anyway — and two competing preselections on one
+		// form is how a scanner ends up recording the sheet the page chose rather than the
+		// one in their hand.
 		if suggestedMapID != next {
 			data["suggestedMapId"] = ""
 			data["suggestedMapName"] = ""

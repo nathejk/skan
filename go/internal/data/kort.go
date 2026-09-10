@@ -55,24 +55,28 @@ const spejderSetFilter = `kortsaetId IN (
 		SELECT id FROM kortsaet WHERE year = ? AND teamType = ?
 	)`
 
-// qrHandoutFilter selects the sheets that are handed over **at a QR scan**.
+// qrCodeFilter selects the sheets that carry a QR code, and so can be bound to a patrulje.
 //
-// `kort.handoutCheckgroupId` records where a sheet is given to a team: the id of the
-// checkgroup whose post hands it over, or `""` for "at the QR scan" — the column's own
-// words. Only the latter can be the sheet a scanner is binding here, because binding a code
-// to a patrulje *is* that handover. A sheet tied to a post is given out by that post, on
-// plan, and is not the scanner's to hand over at a scan.
+// A `skitse` is "a hand-drawn slip with no QR code, and usually no extent, whose only trace in
+// the system is its checkpoint list" (kort's own table.sql). There is no sticker on it, so it
+// can never be the sheet whose code a scanner has just scanned — it has no relevance to this
+// UI at all, and listing it only invites a mis-pick.
 //
-// In this year's data the excluded sheets are exactly the two `skitse` ones, which is a
-// useful sanity check rather than a coincidence: a skitse is "a hand-drawn slip with no QR
-// code" (see kort's table.sql), so it could never have been the sheet whose code is being
-// scanned in the first place.
-const qrHandoutFilter = `handoutCheckgroupId = ''`
+// Deliberately **not** a filter on `handoutCheckgroupId`. An earlier version of this excluded
+// sheets handed out at a post, on the reading that only "at the QR scan" sheets are handed
+// over here. That confused two different things: where a sheet is given out, and whether it
+// carries a code. A sheet handed over at a post still has a sticker, and that sticker still
+// has to be bound to the patrulje — which is what a scanner manning that post is doing (task
+// 019). Only the absence of a code makes a sheet irrelevant.
+//
+// `andet` is deliberately kept: nothing says it has no code, and guessing would hide a sheet a
+// scanner is holding in their hand.
+const qrCodeFilter = `format <> 'skitse'`
 
 // SpejderSheets returns the sheets a patrulje may be handed, in handout order.
 //
-// Restricted to the sheets handed over at a QR scan — see qrHandoutFilter. A sheet given
-// out by a specific post is not on offer here.
+// Restricted to sheets that carry a QR code — see qrCodeFilter. A sketch has no sticker, so
+// there is nothing on it to bind.
 //
 // Empty means the year's patrol maps have not been drawn up yet. That is a setup error
 // for the caller to report, not something to paper over: with no sheet there is nothing
@@ -84,7 +88,7 @@ func (r KortReader) SpejderSheets(ctx context.Context, year string) ([]KortSheet
 	// sortOrder is handout order along the route, which is the order a scanner expects to
 	// see them in.
 	query := `SELECT id, name FROM kort
-		WHERE year = ? AND ` + qrHandoutFilter + ` AND ` + spejderSetFilter + `
+		WHERE year = ? AND ` + qrCodeFilter + ` AND ` + spejderSetFilter + `
 		ORDER BY sortOrder ASC, id ASC`
 
 	rows, err := r.DB.QueryContext(ctx, query, year, year, string(types.TeamTypePatrulje))
@@ -130,7 +134,9 @@ func (r KortReader) SpejderSheets(ctx context.Context, year string) ([]KortSheet
 //
 // Most scanners are not manning a handout post — bandits never are — and then the picker is
 // the right behaviour. So is more than one match: a post configured to hand out several
-// sheets has no single answer, and guessing between them would be worse than asking.
+// sheets has no single answer, and guessing between them would be worse than asking. A post
+// that hands out only sketches is another: they carry no QR code, so there is nothing for this
+// page to suggest.
 func (r KortReader) SheetForScanner(ctx context.Context, year, userID string, at time.Time) (KortSheet, bool, error) {
 	if year == "" || userID == "" {
 		return KortSheet{}, false, nil
@@ -151,6 +157,7 @@ func (r KortReader) SheetForScanner(ctx context.Context, year, userID string, at
 		  AND (cp.startUts = 0 OR cp.startUts <= ?)
 		  AND (cp.endUts = 0 OR cp.endUts >= ?)
 		  AND k.` + spejderSetFilter + `
+		  AND k.` + qrCodeFilter + `
 		ORDER BY k.sortOrder ASC, k.id ASC
 		LIMIT 2`
 
@@ -197,7 +204,7 @@ func (r KortReader) IsSpejderSheet(ctx context.Context, year, id string) (bool, 
 	defer cancel()
 
 	query := `SELECT COUNT(*) FROM kort
-		WHERE id = ? AND year = ? AND ` + qrHandoutFilter + ` AND ` + spejderSetFilter
+		WHERE id = ? AND year = ? AND ` + qrCodeFilter + ` AND ` + spejderSetFilter
 
 	var n int
 	err := r.DB.QueryRowContext(ctx, query, id, year, year, string(types.TeamTypePatrulje)).Scan(&n)

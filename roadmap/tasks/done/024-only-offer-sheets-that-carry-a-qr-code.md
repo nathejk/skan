@@ -66,3 +66,31 @@ is the intended one.
   skitser are gone. `POST` with `Skitse CP2`'s id → `424` *"Det valgte kort hører ikke til
   spejdernes kortsæt"*; `POST` with `Deltagerkort 1` → `303` and the binding recorded
   (`qr` id 6 → team 2, `mapId = kort-6d016679…`). `go build`, `go test`, `staticcheck` green.
+
+## Correction — the filter was on the wrong column
+
+- 2026-09-10 17:20 — HQ, answering the question raised above: *"a skitse does not carry a qr,
+  therefore it has no relevance for this scanner ui"*. So the criterion is **the QR code**, not
+  the handout post, and reading (2) was right.
+  This had conflated two different facts: *where* a sheet is given out
+  (`handoutCheckgroupId`) and *whether it carries a sticker* (`format`). A sheet handed over at
+  a post still has a QR code, and that code still has to be bound to the patrulje — which is
+  precisely what a scanner manning that post is doing (task 019). Only the absence of a code
+  makes a sheet irrelevant here.
+  It was easy to get wrong because in 2026 the two columns select the same rows: both
+  post-handout sheets happen to be sketches. The offered list is therefore **unchanged** —
+  three Deltagerkort — but now for the right reason, and a post that hands out an A3 will work.
+- 2026-09-10 17:22 — `qrHandoutFilter` (`handoutCheckgroupId = ''`) became `qrCodeFilter`
+  (`format <> 'skitse'`), still applied to both `SpejderSheets` and `IsSpejderSheet`. `andet` is
+  deliberately kept: nothing says it has no code, and guessing would hide a sheet a scanner is
+  holding in their hand.
+- 2026-09-10 17:24 — **Task 019 is live again**, so `SheetForScanner` now carries the same
+  filter: a post that hands out only sketches has nothing to suggest, rather than suggesting a
+  sheet the picker excludes. The `offeredSheet` guard stays — it now earns its keep for a real
+  case instead of guarding an impossibility. Updated the note in `.rules` that called 019
+  unreachable.
+- 2026-09-10 17:30 — ✅ Re-verified live: the picker still lists exactly the three Deltagerkort,
+  and the order rule still holds on live data that changed underneath the test (sticker 2 was
+  re-bound to team 5 from a browser mid-session, so team 5 now holds Deltagerkort 1 and the page
+  correctly preselects Deltagerkort 2 with 3 disabled). `go build`, `go test`, `staticcheck`
+  green.
