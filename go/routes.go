@@ -152,6 +152,7 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		"photo":            "",
 		"photoRef":         "",
 		"noPhoto":          false,
+		"discontinued":     false,
 		"maps":             spejderMaps,
 		"noMaps":           len(spejderMaps) == 0,
 		"reassign":         reassign,
@@ -168,6 +169,19 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		data["photo"] = a.coverPhotoURL(r.Context(), team.TeamID)
 		data["confirm"] = ref != "" && (len(spejderMaps) > 0 || carriedMapID != "")
 		data["noPhoto"] = ref == ""
+
+		// A patrulje that has left the race has no active members, so there is nobody in
+		// front of the scanner to hand a map to. Offering the confirmation here would let
+		// a slip of the finger record a sheet against a team that is out of the race —
+		// and the likeliest slip is naming the team the scouts *left* rather than the one
+		// they joined. Refuse, and say which number to use instead.
+		//
+		// Checked after the photograph so this takes precedence over it: "this team is
+		// out" is the more useful answer, and it is true whether or not a photo exists.
+		if team.Discontinued() {
+			data["discontinued"] = true
+			data["confirm"] = false
+		}
 	}
 
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
@@ -190,6 +204,14 @@ func (a *App) doMapHandler(w http.ResponseWriter, r *http.Request) {
 	team, _ := a.models.Patrulje.GetByNumber(r.Context(), a.config.year, teamNumber)
 	if team == nil {
 		http.Error(w, "Patrulje not found", http.StatusNotFound)
+		return
+	}
+
+	// Checked here as well as on the page, because the page cannot be trusted: a form
+	// held open while the last member was moved off the team, or a hand-edited number,
+	// would otherwise bind the sheet to a patrulje that has left the race.
+	if team.Discontinued() {
+		a.registrationRefused(w, r, "Patruljen er udgået af løbet, så den kan ikke få et kort. Er spejderne kommet med på et andet hold, skal du bruge holdnummeret på det hold.")
 		return
 	}
 

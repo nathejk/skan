@@ -83,6 +83,11 @@ that has left the race asks for the *holdnummer* of whoever holds it now, and mo
 map — a different question, in different words, from binding a code that has never been
 used.
 
+The other side of the same rule: **a patrol that has left the race cannot be given a map.**
+It has no members left to hand one to, so naming it is a mistyped number — usually the team
+the scouts left rather than the one they joined. The page says *Patruljen er udgået* and
+names the number to use instead.
+
 ### 3. Every later scan is just a scan
 
 Once a code is known, scanning it shows the patrol (name, arm number, photo) and
@@ -337,5 +342,5 @@ than writing to the database directly.
 
 Work is tracked on a file-based board in `roadmap/tasks/` — `open/`, `doing/` and
 `done/` folders holding one Markdown file per task, with the conventions in
-`roadmap/tasks/TASKS.md`. All 20 filed tasks are done and `open/` is currently empty;
+`roadmap/tasks/TASKS.md`. All 21 filed tasks are done and `open/` is currently empty;
 the gaps listed above are open by choice, not by oversight.

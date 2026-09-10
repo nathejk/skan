@@ -388,7 +388,7 @@ func mapPageData(reassign bool) map[string]any {
 	return map[string]any{
 		"qrid": "7", "checksum": "123",
 		"confirm": false, "team": nil,
-		"photo": "", "photoRef": "", "noPhoto": false,
+		"photo": "", "photoRef": "", "noPhoto": false, "discontinued": false,
 		"maps": []data.KortSheet{{ID: "kort-1", Name: "Deltagerkort 1"}}, "noMaps": false,
 		"reassign": reassign, "carriedMapId": "",
 		"suggestedMapId": "", "suggestedMapName": "",
@@ -449,6 +449,75 @@ func TestMapPageDistinguishesUnusedFromDiscontinued(t *testing.T) {
 			t.Fatalf("the number form must preserve reassign\n%s", raw)
 		}
 	})
+}
+
+// TestMapPageRefusesADiscontinuedPatrol: a patrol that has left the race has no active
+// members, so there is nobody to hand a map to. The page must say so instead of offering
+// the confirmation — and must not be mistaken for the *other* "udgået" sentence on it,
+// which is about the team that previously held the code.
+func TestMapPageRefusesADiscontinuedPatrol(t *testing.T) {
+	render := func(t *testing.T, reassign bool) string {
+		t.Helper()
+		team := testTeam()
+		team.SignupStatus = types.SignupStatusStarted
+		team.ActiveMemberCount = 0
+		if !team.Discontinued() {
+			t.Fatal("the fixture is meant to be discontinued")
+		}
+
+		data := mapPageData(reassign)
+		data["team"] = team
+		data["armNumber"] = "42-5"
+		data["photoRef"] = "ref"
+		data["photo"] = "https://foto/photos/ref"
+		// What mapHandler does once it sees Discontinued(): the photograph and the sheets
+		// are there, and the confirmation is withdrawn anyway.
+		data["discontinued"] = true
+		data["confirm"] = false
+
+		ts, err := template.ParseFS(fs, "templates/base.html", "templates/map.html")
+		if err != nil {
+			t.Fatalf("parsing templates: %v", err)
+		}
+		var out bytes.Buffer
+		if err := ts.ExecuteTemplate(&out, "base", data); err != nil {
+			t.Fatalf("executing template: %v", err)
+		}
+		return out.String()
+	}
+
+	for _, reassign := range []bool{false, true} {
+		name := "unused code"
+		if reassign {
+			name = "reassign"
+		}
+		t.Run(name, func(t *testing.T) {
+			raw := render(t, reassign)
+			body := visibleText(raw)
+
+			if !strings.Contains(body, "Patruljen er udgået") {
+				t.Fatalf("missing the refusal\n%s", body)
+			}
+			// Naming the team is what lets the scanner see they typed the wrong number.
+			if !strings.Contains(body, "Ulvene") {
+				t.Fatalf("the refusal should name the patrol\n%s", body)
+			}
+			// Saying "no" without saying what to do instead strands the scanner.
+			if !strings.Contains(body, "holdnummeret") {
+				t.Fatalf("the refusal should say which number to use instead\n%s", body)
+			}
+			if strings.Contains(body, "tilknyt kortet") || strings.Contains(body, "flyt kortet") {
+				t.Fatalf("a discontinued patrol must not be confirmable\n%s", body)
+			}
+			// This is about the team that was typed, not the code's previous holder.
+			if strings.Contains(body, "Patruljen der havde dette kort") {
+				t.Fatalf("the two udgået sentences have blurred\n%s", body)
+			}
+			if reassign && !strings.Contains(raw, `href="?reassign=1"`) {
+				t.Fatalf("trying another number must keep reassign\n%s", raw)
+			}
+		})
+	}
 }
 
 // TestIdentificationRefPicksAReadableRendition covers which rendition a scanner is shown.

@@ -161,6 +161,13 @@ choose among them.
   *holdnummer* of whoever holds it now, "flyt kortet"). Every link and form on that page must
   carry `reassign` onward — dropping it silently turns a hand-over into a first registration
   and loses the sheet the scouts already carry.
+- **A discontinued patrulje cannot be given a map either** (task 021). There are no active
+  members to hand one to, so naming one is a mistyped number — most often the team the scouts
+  *left* instead of the one they joined. `mapHandler` shows "Patruljen er udgået" and
+  withdraws the confirmation; `doMapHandler` refuses with `424` independently, because the
+  page may have been open while the last member was moved off. Note `map.html` now carries
+  **two** "udgået" sentences about **two different teams** — the code's previous holder and
+  the one just typed. Keep them distinct.
 - **"Discontinued" is a started team with no active members left**:
   `signupStatus == STARTED && activeMemberCount == 0`, and `Patrulje.Discontinued()` is
   where that rule lives. Both halves matter — a team that has not started has no active
@@ -654,6 +661,7 @@ picking up, creating or updating a task.
 | 018 | Discontinued patrol's map may have moved to another team | high | **done** | — |
 | 019 | Assume the map when the scanner mans a handout post | medium | **done** | — |
 | 020 | Expected head count + strength-change warning | high | **done** | — |
+| 021 | Refuse linking a QR code to a discontinued patrol | high | **done** | 018 |
 
 **Open: none.** Every filed task is done; see *Known deviations* for what remains
 unresolved by choice.

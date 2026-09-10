@@ -11,8 +11,17 @@
          The difference decides what to ask and what to promise, so the two are never
          described with the same words. `reassign` is what tells them apart. */}}
     <div class="starter-template">
-        <h1>{{ if .reassign }}Hvem har kortet nu?{{ else }}Tilknyt patrulje{{ end }}</h1>
-        {{ if .confirm }}
+        <h1>{{ if .discontinued }}Patruljen er udgået{{ else if .reassign }}Hvem har kortet nu?{{ else }}Tilknyt patrulje{{ end }}</h1>
+        {{ if .discontinued }}
+        {{/* The team that was *typed*, not the one that had the code — keep this distinct
+             from the reassign notice below, which is about the previous holder. */}}
+        <p class="lead" style="color:red">Patrulje {{ .armNumber }}. {{ .team.Name }} er
+        udgået af løbet, så den kan ikke få et kort.</p>
+        <p>Er spejderne kommet med på et andet hold, er det holdnummeret på <em>det</em> hold,
+        du skal bruge. Passer det ikke, så kontakt HQ.</p>
+        <p><a href="?{{ if .reassign }}reassign=1{{ end }}">Prøv et andet nummer</a></p>
+
+        {{ else if .confirm }}
         <p class="lead">Er dette patruljen der står foran dig?</p>
         <div class="row">
         <div class="col-md-3"></div>
