@@ -143,6 +143,13 @@ choose among them.
   and the last registration wins. The guard against a careless re-point is the photo
   confirmation, plus the fact that the re-bind screen is only reachable when the current
   team is discontinued.
+- **An unused code and a discontinued team's code are different situations and must never
+  share wording.** `reassign` tells them apart: one has never been bound to a patrulje
+  ("ikke tilknyttet en patrulje endnu", asks for a *patruljenummer*, "tilknyt kortet"), the
+  other was bound to a team that has left the race ("udgået af løbet", asks for the
+  *holdnummer* of whoever holds it now, "flyt kortet"). Every link and form on that page must
+  carry `reassign` onward — dropping it silently turns a hand-over into a first registration
+  and loses the sheet the scouts already carry.
 - **"Discontinued" is a started team with no active members left**:
   `signupStatus == STARTED && activeMemberCount == 0`, and `Patrulje.Discontinued()` is
   where that rule lives. Both halves matter — a team that has not started has no active
@@ -220,7 +227,7 @@ of scans is `PUT /register`, which always has a real QR id.
 | Route | Purpose |
 |---|---|
 | `GET /` | Landing page — says how scanning works, and is where a scanner logs in |
-| `GET /qr/{id}/{cs}` | **Scan landing page.** Unknown code → publishes `found`, redirects to `/map/…`. Known code → renders the confirmation/geolocation page |
+| `GET /qr/{id}/{cs}` | **Scan landing page.** Unknown code → publishes `found`, redirects to `/map/…`. Code whose patrulje is discontinued → redirects to `/map/…?reassign=1`. Otherwise renders the confirmation/geolocation page |
 | `POST /qr/{id}/{cs}` | Login form target for the scan page |
 | `GET /map/{id}/{cs}` | Registration page — asks for / confirms the team number |
 | `POST /map/{id}/{cs}` | Publishes `registered`, redirects back to `/qr/…` |

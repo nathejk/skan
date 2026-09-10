@@ -230,3 +230,26 @@ projections present, `kort.Maps()` works and the narrow reader can probably go a
 - 2026-09-10 09:18 — Noted in `.rules` that these two packages now **diverge from hq's
   copies**, so re-copying them would silently revert the fix, and added idempotency to the
   projection conventions. The fix should go upstream.
+- 2026-09-10 11:45 — HQ: the two arrivals on the registration page need different
+  descriptions. They were sharing them, and worse than sharing — **contradicting**: a code
+  from a discontinued patrulje was introduced as "udgået af løbet" and then, two lines later,
+  as one that "har ikke været scannet før". Both sentences were on screen at once, because
+  the reassign notice was printed above a number-entry branch written for unused codes.
+- 2026-09-10 11:46 — Split them properly. An unused code: "Denne QR-kode er ikke tilknyttet
+  en patrulje endnu" — which also drops the older claim that it "har ikke været scannet før",
+  untrue on its face since scanning it is what brought the scanner to the page. A
+  discontinued one: "Patruljen der havde dette kort er udgået af løbet", asking for the
+  **holdnummer** of whoever has it now rather than a patruljenummer, and confirming with
+  "Ja, de har kortet nu – flyt kortet" instead of "tilknyt kortet" — it is a hand-over, not a
+  first registration.
+- 2026-09-10 11:47 — Found a second bug while in there: the "det er en anden patrulje" and
+  "prøv et andet patruljenummer" links pointed at bare `?`, dropping `reassign=1`. Going back
+  therefore turned a hand-over into a first-time registration — losing the explanation *and*
+  the sheet the scouts already carry, so the scanner would have been asked to pick a sheet
+  again. Both links and the number form now carry it.
+- 2026-09-10 11:50 — ✅ Verified live, both codes side by side: sticker 6 (never registered)
+  gives "Tilknyt patrulje" → "ikke tilknyttet en patrulje endnu" → "Indtast
+  patruljenummeret"; sticker 4 (bound to team 1, `STARTED` with 0 active) gives "Hvem har
+  kortet nu?" → "udgået af løbet" → "Indtast holdnummeret". With a team chosen, the reassign
+  path carries `mapId`, says "flyt kortet", and its back-link keeps `?reassign=1`. Tests
+  assert each description is absent from the other page.

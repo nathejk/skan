@@ -380,3 +380,72 @@ func TestExpectedHeadCountIsShownToBandits(t *testing.T) {
 		t.Fatalf("scanCount reached a bandit: %+v", data)
 	}
 }
+
+// mapPageData is the shape mapHandler passes to templates/map.html, with only the keys
+// the number-entry states read.
+func mapPageData(reassign bool) map[string]any {
+	return map[string]any{
+		"qrid": "7", "checksum": "123",
+		"confirm": false, "team": nil,
+		"photo": "", "photoRef": "", "noPhoto": false,
+		"maps": []data.KortSheet{{ID: "kort-1", Name: "Deltagerkort 1"}}, "noMaps": false,
+		"reassign": reassign, "carriedMapId": "",
+		"suggestedMapId": "", "suggestedMapName": "",
+	}
+}
+
+// TestMapPageDistinguishesUnusedFromDiscontinued guards a contradiction the page used to
+// print: a code from a discontinued patrulje was introduced as "udgået af løbet" and then,
+// two lines later, as one that "har ikke været scannet før".
+//
+// The two arrivals mean different things — never handed out, versus handed out to a team
+// that has since left — so they must never share wording.
+func TestMapPageDistinguishesUnusedFromDiscontinued(t *testing.T) {
+	render := func(t *testing.T, reassign bool) string {
+		t.Helper()
+		ts, err := template.ParseFS(fs, "templates/base.html", "templates/map.html")
+		if err != nil {
+			t.Fatalf("parsing templates: %v", err)
+		}
+		var out bytes.Buffer
+		if err := ts.ExecuteTemplate(&out, "base", mapPageData(reassign)); err != nil {
+			t.Fatalf("executing template: %v", err)
+		}
+		return out.String()
+	}
+
+	t.Run("unused code", func(t *testing.T) {
+		body := visibleText(render(t, false))
+
+		if !strings.Contains(body, "ikke tilknyttet en patrulje endnu") {
+			t.Fatalf("missing the unused-code description\n%s", body)
+		}
+		if strings.Contains(body, "udgået") {
+			t.Fatalf("an unused code must not mention a discontinued patrol\n%s", body)
+		}
+		// It has just been scanned, so claiming otherwise is simply untrue.
+		if strings.Contains(body, "har ikke været scannet før") {
+			t.Fatalf("scanning it is what brought the scanner here\n%s", body)
+		}
+	})
+
+	t.Run("code from a discontinued patrulje", func(t *testing.T) {
+		raw := render(t, true)
+		body := visibleText(raw)
+
+		if !strings.Contains(body, "udgået af løbet") {
+			t.Fatalf("missing the discontinued description\n%s", body)
+		}
+		if strings.Contains(body, "ikke tilknyttet en patrulje endnu") {
+			t.Fatalf("a used code must not be described as unused\n%s", body)
+		}
+		if !strings.Contains(body, "har kortet nu") {
+			t.Fatalf("should ask who holds the map now\n%s", body)
+		}
+		// Losing this on the way back turns a hand-over into a first-time registration,
+		// and drops the sheet the scouts already carry.
+		if !strings.Contains(raw, `name="reassign" value="1"`) {
+			t.Fatalf("the number form must preserve reassign\n%s", raw)
+		}
+	})
+}

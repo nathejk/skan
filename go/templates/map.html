@@ -1,12 +1,17 @@
 {{define "title"}}Nathejk{{end}}
 
 {{define "content"}}
+    {{/* Two arrivals land on this page and they mean different things:
+
+         - an **unused** code: scanned, but never bound to a patrulje. The scanner is
+           handing out a map for the first time.
+         - a code from a **discontinued** patrulje: bound, but its team has left the race,
+           so the map has probably travelled to whichever team took the remaining scouts.
+
+         The difference decides what to ask and what to promise, so the two are never
+         described with the same words. `reassign` is what tells them apart. */}}
     <div class="starter-template">
         <h1>{{ if .reassign }}Hvem har kortet nu?{{ else }}Tilknyt patrulje{{ end }}</h1>
-        {{ if .reassign }}
-        <p class="lead">Patruljen der havde dette kort er udgået af løbet. Hvis spejderne
-        er kommet med på et andet hold, skal kortet overføres til det nye holdnummer.</p>
-        {{ end }}
         {{ if .confirm }}
         <p class="lead">Er dette patruljen der står foran dig?</p>
         <div class="row">
@@ -53,11 +58,19 @@
             </div>
             {{ end }}
 
+            {{ if .reassign }}
+            <p>Tjek billedet grundigt. Når du bekræfter, bliver kortet flyttet til denne
+            patrulje for resten af løbet.</p>
+            <button type="submit" class="btn btn-primary btn-lg" name="confirmed" value="{{ .team.TeamNumber }}">Ja, de har kortet nu &ndash; flyt kortet</button>
+            {{ else }}
             <p>Tjek billedet grundigt. Når du bekræfter, bliver QR-koden på kortet bundet til
             denne patrulje for resten af løbet.</p>
             <button type="submit" class="btn btn-primary btn-lg" name="confirmed" value="{{ .team.TeamNumber }}">Ja, det er dem &ndash; tilknyt kortet</button>
+            {{ end }}
         </form>
-        <p><a href="?">Nej, det er en anden patrulje</a></p>
+        {{/* Keep reassign in the link, or going back turns a hand-over into a first-time
+             registration — losing the explanation and the sheet the scouts already carry. */}}
+        <p><a href="?{{ if .reassign }}reassign=1{{ end }}">Nej, det er en anden patrulje</a></p>
 
         {{ else if .noMaps }}
         <p class="lead" style="color:red">Der er ikke oprettet nogen kort til spejderne i år,
@@ -68,10 +81,25 @@
         <p class="lead" style="color:red">Vi har ikke noget billede af patrulje
         {{ .armNumber }}. {{ .team.Name }}, så vi kan ikke bekræfte at det er dem.</p>
         <p>En patrulje kan ikke starte uden billede, så det er en fejl. Kontakt HQ.</p>
-        <p><a href="?">Prøv et andet patruljenummer</a></p>
+        <p><a href="?{{ if .reassign }}reassign=1{{ end }}">Prøv et andet patruljenummer</a></p>
+
+        {{ else if .reassign }}
+        {{/* A used code whose patrulje has left the race. It has been scanned before — that
+             is precisely why we know whose it was — so it must not be described as unused. */}}
+        <p class="lead">Patruljen der havde dette kort er udgået af løbet.</p>
+        <p>Hvis spejderne er kommet med på et andet hold, har de taget kortet med. Indtast
+        holdnummeret på det hold, der har kortet nu:</p>
+        <form action="" method="get">
+            <input type="hidden" name="reassign" value="1" />
+            <input type="number" class="form-control" name="number" placeholder="Holdnummer">
+            <button type="submit" class="btn btn-primary">Videre &raquo;</button>
+        </form>
 
         {{ else }}
-        <p class="lead">Denne QR-kode har ikke været scannet før, indtast patruljenummer på den patrulje der skal tilknyttes denne QR-kode:</p>
+        {{/* An unused code. Not "har ikke været scannet før" — scanning it is what brought
+             the scanner here; what it has never been is *tilknyttet* a patrulje. */}}
+        <p class="lead">Denne QR-kode er ikke tilknyttet en patrulje endnu.</p>
+        <p>Indtast patruljenummeret på den patrulje, der skal have kortet:</p>
         <form action="" method="get">
             <input type="number" class="form-control" name="number" placeholder="Patruljenummer">
             <button type="submit" class="btn btn-primary">Videre &raquo;</button>
