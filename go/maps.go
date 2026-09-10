@@ -19,6 +19,22 @@ func (a *App) spejderSheets(ctx context.Context) ([]data.KortSheet, error) {
 	return a.models.Kort.SpejderSheets(ctx, a.config.year)
 }
 
+// offeredSheet reports whether a sheet id is among the sheets on offer.
+//
+// Used to keep a suggestion honest: naming a sheet that is not in the list leaves the
+// scanner hunting for an option that is not there, which is worse than no suggestion.
+func offeredSheet(sheets []data.KortSheet, id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, s := range sheets {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // isSpejderSheet reports whether a chosen sheet is one a patrulje may be handed.
 //
 // Checked server-side on submit for the same reason the photo confirmation is: the form

@@ -55,7 +55,24 @@ const spejderSetFilter = `kortsaetId IN (
 		SELECT id FROM kortsaet WHERE year = ? AND teamType = ?
 	)`
 
+// qrHandoutFilter selects the sheets that are handed over **at a QR scan**.
+//
+// `kort.handoutCheckgroupId` records where a sheet is given to a team: the id of the
+// checkgroup whose post hands it over, or `""` for "at the QR scan" — the column's own
+// words. Only the latter can be the sheet a scanner is binding here, because binding a code
+// to a patrulje *is* that handover. A sheet tied to a post is given out by that post, on
+// plan, and is not the scanner's to hand over at a scan.
+//
+// In this year's data the excluded sheets are exactly the two `skitse` ones, which is a
+// useful sanity check rather than a coincidence: a skitse is "a hand-drawn slip with no QR
+// code" (see kort's table.sql), so it could never have been the sheet whose code is being
+// scanned in the first place.
+const qrHandoutFilter = `handoutCheckgroupId = ''`
+
 // SpejderSheets returns the sheets a patrulje may be handed, in handout order.
+//
+// Restricted to the sheets handed over at a QR scan — see qrHandoutFilter. A sheet given
+// out by a specific post is not on offer here.
 //
 // Empty means the year's patrol maps have not been drawn up yet. That is a setup error
 // for the caller to report, not something to paper over: with no sheet there is nothing
@@ -67,7 +84,7 @@ func (r KortReader) SpejderSheets(ctx context.Context, year string) ([]KortSheet
 	// sortOrder is handout order along the route, which is the order a scanner expects to
 	// see them in.
 	query := `SELECT id, name FROM kort
-		WHERE year = ? AND ` + spejderSetFilter + `
+		WHERE year = ? AND ` + qrHandoutFilter + ` AND ` + spejderSetFilter + `
 		ORDER BY sortOrder ASC, id ASC`
 
 	rows, err := r.DB.QueryContext(ctx, query, year, year, string(types.TeamTypePatrulje))
@@ -167,6 +184,10 @@ func (r KortReader) SheetForScanner(ctx context.Context, year, userID string, at
 // A query rather than a check against a list the caller already has: whether a sheet is
 // eligible is a fact about the read model, and the value being checked arrives from a
 // form that can be posted directly.
+//
+// Deliberately the same two filters as SpejderSheets, so what is validated on submit is
+// exactly what was offered. Any sheet excluded from the list must be refused here too,
+// or the restriction is decoration — the form can be posted by hand.
 func (r KortReader) IsSpejderSheet(ctx context.Context, year, id string) (bool, error) {
 	if id == "" || year == "" {
 		return false, nil
@@ -176,7 +197,7 @@ func (r KortReader) IsSpejderSheet(ctx context.Context, year, id string) (bool, 
 	defer cancel()
 
 	query := `SELECT COUNT(*) FROM kort
-		WHERE id = ? AND year = ? AND ` + spejderSetFilter
+		WHERE id = ? AND year = ? AND ` + qrHandoutFilter + ` AND ` + spejderSetFilter
 
 	var n int
 	err := r.DB.QueryRowContext(ctx, query, id, year, year, string(types.TeamTypePatrulje)).Scan(&n)

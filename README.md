@@ -58,8 +58,8 @@ only.
 A freshly printed code means nothing to the system. The first scanner is asked
 for the patrol's **team number** — the large number on the scouts' arms, not the
 small number printed beside the QR code — and for **which map sheet** they are handing
-over, chosen from the set drawn up for the scouts. Confirming ties that sticker to that
-patrol and that sheet for the rest of the race.
+over, chosen from the sheets the scouts are given at a scan. Confirming ties that sticker to
+that patrol and that sheet for the rest of the race.
 
 Because a patrol receives its first map at the start of the race, and **no patrol may
 start without having been photographed**, a photograph always exists at this point.
@@ -71,6 +71,10 @@ named here.
 The photograph is shown large enough to actually recognise faces in — roughly a
 thousand pixels wide, not a list thumbnail. It is the identity check, and squinting at
 it is not a check.
+
+The list offers only the sheets that are **handed over at a scan**. Sheets a particular
+checkpoint gives out are that post's business, and the hand-drawn sketches carry no QR code at
+all, so neither can be the sheet whose sticker is being bound.
 
 If the scanner is on duty at a checkpoint where maps are handed out, that checkpoint's
 sheet is preselected for them. It is only ever a suggestion: if the duty roster leaves
@@ -349,5 +353,5 @@ than writing to the database directly.
 
 Work is tracked on a file-based board in `roadmap/tasks/` — `open/`, `doing/` and
 `done/` folders holding one Markdown file per task, with the conventions in
-`roadmap/tasks/TASKS.md`. All 23 filed tasks are done and `open/` is currently empty;
+`roadmap/tasks/TASKS.md`. All 24 filed tasks are done and `open/` is currently empty;
 the gaps listed above are open by choice, not by oversight.

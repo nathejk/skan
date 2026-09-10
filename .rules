@@ -137,7 +137,8 @@ choose among them.
   `checkpersonnel → checkpoint.checkgroupId → kort.handoutCheckgroupId`. Deliberately
   conservative: the shift's time range is honoured when set, the read is year-scoped, and
   **two candidate sheets mean no suggestion at all** rather than a guess. The suggestion is
-  preselected and labelled, never applied silently.
+  preselected and labelled, never applied silently. **Unreachable in practice since task 024**
+  — see that entry below before touching it.
 - **The `checkpoint` and `checkpersonnel` projections are locally fixed and therefore
   diverge from hq's copies.** Both used a plain `INSERT` for their create/add events, so
   every replay re-inserted rows that already existed and dead-lettered them — 16 per boot
@@ -147,6 +148,16 @@ choose among them.
   replaced their `%q` quoting.
   **Re-copying either package from hq would silently revert this** — diff before you do, and
   push the fix upstream instead.
+- **Only sheets handed out at a QR scan are on offer** (task 024). `kort.handoutCheckgroupId`
+  is where a sheet is given to a team — a checkgroup's post, or `""` meaning "at the QR scan"
+  in the column's own words — and the picker lists only the `""` ones. `SpejderSheets` and
+  `IsSpejderSheet` share the filter, because a restriction applied only to the rendered
+  options is decoration: the form can be posted by hand. In 2026 the excluded sheets are
+  exactly the two `format='skitse'` ones, which by definition carry no QR code.
+  **Consequence: task 019's suggestion is currently unreachable** — `SheetForScanner` finds a
+  sheet *by* its handout post, so it can only ever return an excluded one. It is guarded by
+  `offeredSheet` rather than deleted, pending HQ deciding whether the two features need
+  reconciling. Do not remove the guard.
 - Registering a code **requires** a sheet from the spejder set, validated server-side, and
   the chosen id travels on the `registered` event as `mapId` (`event.QrRegistered`).
 - **A code can be re-bound within a year.** A discontinued patrol's remaining scouts are
@@ -686,6 +697,7 @@ picking up, creating or updating a task.
 | 021 | Refuse linking a QR code to a discontinued patrol | high | **done** | 018 |
 | 022 | Scan page can hang forever on "Finder position" | high | **done** | 016 |
 | 023 | Remember the scanner's own last position; stop leaking the patrol's | high | **done** | 016 |
+| 024 | Only offer map sheets that are handed out at a QR scan | high | **done** | 017, 019 |
 
 **Open: none.** Every filed task is done; see *Known deviations* for what remains
 unresolved by choice.

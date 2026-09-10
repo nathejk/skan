@@ -132,13 +132,18 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 	// The sheet this scanner's post hands out, if they man one. Preselected rather than
 	// applied silently: a wrong assumption would bind a patrol's code to a map they were
 	// never given, and the scanner is the only one who can see that it is wrong.
+	//
+	// Now that the picker offers only sheets handed over *at a QR scan*, a suggestion is
+	// kept only if it is actually among them. `SheetForScanner` resolves a sheet by its
+	// handout post, so with the current data it never is — and naming an option that is not
+	// in the list would leave the scanner hunting for it.
 	suggestedMapID := ""
 	suggestedMapName := ""
 	if user, err := login.UserFromRequest(r); err == nil && user != nil {
 		sheet, found, err := a.models.Kort.SheetForScanner(r.Context(), a.config.year, string(user.ID), time.Now())
 		if err != nil {
 			log.Printf("reading the sheet for scanner %s: %v", user.ID, err)
-		} else if found {
+		} else if found && offeredSheet(spejderMaps, sheet.ID) {
 			suggestedMapID = sheet.ID
 			suggestedMapName = sheet.Name
 		}

@@ -520,6 +520,39 @@ func TestMapPageRefusesADiscontinuedPatrol(t *testing.T) {
 	}
 }
 
+// TestOfferedSheetKeepsASuggestionHonest: the picker now lists only sheets handed over at a
+// QR scan, while the handout-post suggestion resolves a sheet by its post. A suggestion that
+// is not in the list must be dropped rather than named — pointing a scanner at an option that
+// is not there is worse than saying nothing.
+func TestOfferedSheetKeepsASuggestionHonest(t *testing.T) {
+	sheets := []data.KortSheet{
+		{ID: "kort-1", Name: "Deltagerkort 1"},
+		{ID: "kort-2", Name: "Deltagerkort 2"},
+	}
+
+	tests := []struct {
+		name string
+		id   string
+		want bool
+	}{
+		{"a sheet on offer", "kort-2", true},
+		{"a sheet handed out at a post, so excluded", "kort-skitse", false},
+		{"no suggestion at all", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := offeredSheet(sheets, tt.id); got != tt.want {
+				t.Fatalf("offeredSheet(%q) = %v, want %v", tt.id, got, tt.want)
+			}
+		})
+	}
+
+	// An empty list cannot offer anything, not even an empty id.
+	if offeredSheet(nil, "kort-1") {
+		t.Fatal("nothing is on offer when there are no sheets")
+	}
+}
+
 // TestIdentificationRefPicksAReadableRendition covers which rendition a scanner is shown.
 //
 // The photograph is the identity check, so it has to be big enough to recognise faces in —
