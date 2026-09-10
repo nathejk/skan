@@ -14,11 +14,16 @@
     <div class="working starter-template">
         <h1>Finder position</h1>
         <i class="icon-spinner icon-spin icon-5x"></i>
+        {{/* An escape hatch, because the wait can be unbounded through no fault of this
+             page: while the browser's permission prompt sits unanswered the geolocation
+             timeout does not run at all. Revealed by the script, since without JS there is
+             no picker to reach. */}}
+        <p style="margin-top:20px"><a href="#" id="skipToMap" style="display:none">Det tager for lang tid &ndash; sæt markør på kort i stedet</a></p>
     </div>
 
     <div class="picker">
         <h1>Hvor er I?</h1>
-        <p class="lead">Din telefon kunne ikke finde positionen. Zoom ind og sæt en
+        <p class="lead">Din telefon kunne ikke finde positionen i tide. Zoom ind og sæt en
         markør, hvor I står.</p>
         <div id="map"></div>
         <button id="savePosition" class="btn btn-primary btn-lg btn-block" disabled>
@@ -94,6 +99,11 @@
 <script type="text/javascript">
 const main = document.getElementById('main')
 
+// Nothing may be recorded twice, and the page may never be left on the spinner. Both
+// hazards have the same shape: several things race to finish this scan -- the GPS fix, the
+// watchdog below, the scanner's own tap -- so whichever arrives first claims it.
+let claimed = false
+
 // Send the scan. On 409 the server is asking whether a quick repeat should count:
 // re-send once with confirm set if the scanner says yes. The decision is the
 // server's -- this only relays the question.
@@ -102,11 +112,20 @@ async function put(data, confirmed) {
     data.teamNumber = {{ .team.TeamNumber }} | 0
     if (confirmed) { data.confirm = true }
 
-    const response = await fetch('/register', {
-      method: 'PUT',
-      headers: { 'Content-type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+    let response
+    try {
+        response = await fetch('/register', {
+          method: 'PUT',
+          headers: { 'Content-type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+    } catch (e) {
+        // A signal that dropped mid-request. Say plainly that the scan did not happen:
+        // leaving the spinner up implies it still might, and the scanner would walk away
+        // believing it was recorded.
+        main.className = ''
+        return
+    }
 
     if (response.status === 409 && !confirmed) {
         let message = 'Skal dette tælle som en ny scanning?'
@@ -129,6 +148,9 @@ async function put(data, confirmed) {
 function register(data) { put(data, false) }
 
 function getLocation(pos) {
+    // A fix that arrives after the scanner has been sent to the map is too late to act on.
+    if (claimed) { return }
+    claimed = true
     register({
         latitude: pos.coords.latitude.toString(),
         longitude: pos.coords.longitude.toString(),
@@ -146,6 +168,11 @@ function getLocation(pos) {
 // Opens on the patrol's last known position where there is one, so nobody has to pan
 // across the country in the dark; otherwise on a wide view.
 function pickOnMap() {
+    // Reachable from three directions -- geolocation error, watchdog, the scanner's own
+    // link -- and Leaflet throws if asked to initialise the same container twice.
+    if (claimed) { return }
+    claimed = true
+
     main.className = 'picking'
 
     const lastLat = parseFloat('{{ .lastLatitude }}')
@@ -177,6 +204,7 @@ function pickOnMap() {
         if (!marker) { return }
         button.disabled = true
         main.className = 'working'
+        skip.style.display = 'none'
         const at = marker.getLatLng()
         register({
             latitude: at.lat.toString(),
@@ -192,10 +220,44 @@ function pickOnMap() {
 }
 
 main.className = 'working'
+
+// How long a scanner is asked to stare at a spinner before being offered the map instead.
+//
+// This is not the same thing as the geolocation timeout, and cannot be replaced by it: the
+// spec stops that clock while the permission prompt is unanswered, so a scanner who does
+// not tap allow or deny waits forever and neither callback ever runs. That is exactly how
+// this page got stuck, with nothing in the console because nothing had gone wrong as far
+// as the browser was concerned.
+const positionBudget = 15000
+
+const skip = document.getElementById('skipToMap')
+skip.style.display = 'inline'
+skip.addEventListener('click', function (e) {
+    e.preventDefault()
+    pickOnMap()
+})
+
 if (navigator && navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(getLocation, pickOnMap)
+    // A watchdog, because the callbacks below cannot be relied upon to arrive at all.
+    const watchdog = setTimeout(pickOnMap, positionBudget)
+
+    navigator.geolocation.getCurrentPosition(
+        function (pos) { clearTimeout(watchdog); getLocation(pos) },
+        function (err) { clearTimeout(watchdog); pickOnMap() },
+        {
+            // Worth the extra seconds: the accuracy is recorded alongside the position and
+            // a coarse fix is of little use for finding a patrol again.
+            enableHighAccuracy: true,
+            // A belt to the watchdog's braces, honoured once permission is settled.
+            timeout: positionBudget,
+            // Reuse a very recent fix rather than waiting for a new one. The scanner is
+            // standing still in front of a patrol, so a few seconds' drift on foot is
+            // nothing next to the accuracy radius -- and it removes most of the waiting.
+            maximumAge: 15000,
+        }
+    )
 } else {
-  pickOnMap()
+    pickOnMap()
 }
 </script>
 {{end}}

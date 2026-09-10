@@ -599,6 +599,16 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   behind it. Scans from before these fields exist carry `""`, which must **not** be read
   as GPS. Both live in `nathejk/event` as additive properties on the shared body — they
   should be upstreamed into `shared-go` so hq and the map tooling can rely on them.
+- **`navigator.geolocation` may never call back at all**, so the page carries its own
+  15 s watchdog (task 022). A `timeout` option is not enough: the spec stops that clock
+  while the permission prompt is unanswered, so a scanner who taps neither allow nor deny
+  hangs on "Finder position" forever with an **empty console** — nothing failed, as far as
+  the browser is concerned. A single `claimed` flag arbitrates between the fix, the
+  watchdog and the scanner's own "skip to map" link, so one scan cannot be recorded twice.
+  Any new path that finishes a scan must respect it.
+- **Never leave the spinner up on a failure.** A `PUT` that rejects must say the scan was
+  not recorded: a spinner reads as "still working", and a scanner walks away from a lost
+  scan believing it landed.
 - **A client-supplied `source` is a claim, not a fact.** `event.NormalizeSource` maps it
   onto the known set and anything else to `""`, at the edge *and* again in the consumer,
   so a replay does not trust what an older publisher put on the stream. Accuracy is
@@ -662,6 +672,7 @@ picking up, creating or updating a task.
 | 019 | Assume the map when the scanner mans a handout post | medium | **done** | — |
 | 020 | Expected head count + strength-change warning | high | **done** | — |
 | 021 | Refuse linking a QR code to a discontinued patrol | high | **done** | 018 |
+| 022 | Scan page can hang forever on "Finder position" | high | **done** | 016 |
 
 **Open: none.** Every filed task is done; see *Known deviations* for what remains
 unresolved by choice.
