@@ -22,6 +22,74 @@ The pieces on the `kort` side are ready: `kort.handoutCheckgroupId` is exactly "
 checkgroup whose post gives this sheet to the team", and `""` on that column already means
 "handed over at the QR scan" rather than at a post.
 
+## What is needed — exactly three projections
+
+The chain skan has to walk is `scanner → checkpoint → checkgroup → sheet`:
+
+```
+login.User.ID (types.UserID)
+   │  checkpersonnel: userId ↔ checkpointId (+ timeRange)
+   ▼
+checkpoint.checkgroupId
+   │
+   ▼
+kort.handoutCheckgroupId  →  the sheet handed out at that post
+```
+
+### 1. `checkpersonnel`
+
+The missing link, and the only one skan cannot fake. Needed to answer "which post is this
+scanner manning".
+
+| | |
+|---|---|
+| Subject | `NATHEJK.{year}.checkpersonnel.{id}.added` — **3 on the stream** (1×2026, 2×2025) |
+| Bodies | `messages.NathejkCheckpersonnelAdded{UserID, CheckpointID, TimeRange}`, plus `…Removed{UserID, CheckpointID}` and `…TimeSpecified{Start, End}`, which exist as types but have **no events on the stream yet** |
+| Must expose | given a `types.UserID`, the checkpoint(s) they are assigned to |
+
+`UserID` lines up with `login.User.ID` for crew, since crew come from the `personnel`
+projection — so no identity mapping is needed.
+
+### 2. `checkpoint`
+
+| | |
+|---|---|
+| Subjects | `NATHEJK.{year}.checkpoint.{id}.created` / `.updated` — **13 each** |
+| Bodies | `NathejkCheckpointCreated{CheckpointID, CheckgroupID}`, `NathejkCheckpointUpdated{…}` |
+| Must expose | a checkpoint's `checkgroupId` |
+
+**The table must be named `checkpoint` with `id` and `year` columns.** `kort`'s querier
+already runs `SELECT id FROM checkpoint WHERE (year = ? OR ? = '')`, so getting these names
+right is what makes `kort.Maps()` work here.
+
+### 3. `checkgroup`
+
+| | |
+|---|---|
+| Subjects | `NATHEJK.{year}.checkgroup.{id}.created` / `.updated` — **8 each**, plus `NATHEJK.{year}.checkgroups.sorted` |
+| Must expose | nothing beyond existing; skan only needs the id to compare against `kort.handoutCheckgroupId` |
+
+**Table named `checkgroup` with `id` and `year`** — same reason: `kort` queries
+`SELECT id FROM checkgroup WHERE (year = ? OR ? = '')`.
+
+### Things to expect when they land
+
+The last three copied packages each brought an integration snag, so worth checking up front:
+
+- **A `table.sql` with more than one `CREATE TABLE`** needs `multiStatements=true` — already
+  set in `DB_DSN` since `spejderstatus`.
+- **Unused helpers in a copied test file** trip `staticcheck` U1000, which fails the prod
+  build; the fix is a per-package `staticcheck.conf` with `checks = ["inherit", "-U1000"]`,
+  not editing the file.
+- **A newer `shared-go`** may be required; the last bump silently dropped a field skan
+  depended on.
+- Construct all three with a **nil publisher**: skan reads them, hq owns them.
+
+### Once they are in
+
+`data.KortReader` exists only because `kort.Maps()` could not run without these tables. It
+should be reconsidered — probably deleted in favour of `kort.Maps()` plus `kort.Sets()`.
+
 ## Why this is blocked
 
 The events exist on the stream — confirmed by listing subjects:
@@ -58,12 +126,14 @@ projections present, `kort.Maps()` works and the narrow reader can probably go a
 
 ## Open questions for HQ
 
-1. **Is `checkpersonnel.added` per event or per shift?** "Active as checkpersonnel"
-   implies a current assignment; if the event has no end, the projection needs to know what
-   makes an assignment stop being current.
-2. **What if the scanner mans a post that hands out more than one sheet?** Several sheets
-   may name the same `handoutCheckgroupId`. Assume the first in handout order, or fall back
-   to asking?
+1. **What makes a checkpersonnel assignment "current"?** `NathejkCheckpersonnelAdded`
+   carries an optional `TimeRange`, and `Removed`/`TimeSpecified` exist as message types but
+   have no events on the stream. If assignments in practice never end, "active as
+   checkpersonnel" means "ever assigned", and a crew member who manned a post last year would
+   still match — so the read must at least be year-scoped, and probably time-scoped too.
+2. **What if the scanner mans a post that hands out more than one sheet?** Several sheets may
+   name the same `handoutCheckgroupId`. Assume the first in handout order, or fall back to
+   asking?
 3. **Should an assumed sheet still be shown for confirmation**, or silently applied? The
    photo confirmation is already on that screen, so showing "Kort: Deltagerkort 2" beside it
    costs nothing and keeps the scanner able to catch a wrong assumption.
@@ -87,3 +157,13 @@ projections present, `kort.Maps()` works and the narrow reader can probably go a
   way to know which post a scanner is manning. Listed the stream's subjects to confirm the
   events are there before concluding this is a missing-projection problem rather than a
   missing-event one.
+- 2026-09-10 08:50 — HQ offered to copy the projections in, so wrote up exactly which three
+  and what they must expose, including the **table names `checkpoint` and `checkgroup` with
+  `id` and `year` columns** that `kort`'s querier already assumes. Counted the events on the
+  stream: 13 checkpoints, 8 checkgroups, and only **3** checkpersonnel assignments — enough
+  to verify the feature, but thin enough that a bug would be easy to miss.
+- 2026-09-10 08:52 — Sharpened question 1 after reading the message types:
+  `CheckpersonnelAdded` carries an optional `TimeRange`, and `Removed`/`TimeSpecified` exist
+  but have never been published. So "active as checkpersonnel" currently has no end condition
+  in the data, which is the one thing that could make this feature assume a sheet for someone
+  who is not at that post tonight.
