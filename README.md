@@ -31,7 +31,7 @@ The domain is Danish and stays Danish in the code and the UI:
 
 ### 1. Codes are generated before the race
 
-`GET /qr?n=500` returns a CSV of `id,url` — one line per sticker:
+`GET /qr?n=500&token=…` returns a CSV of `id,url` — one line per sticker:
 
 ```
 1,https://skan.nathejk.dk/qr/1/2394859
@@ -40,7 +40,8 @@ The domain is Danish and stays Danish in the code and the UI:
 
 The trailing number is a checksum of the id plus a shared secret, so the URLs
 can't be guessed by counting upwards. The CSV goes to whoever prints the
-stickers.
+stickers. Ids are scoped to the event year, so last year's stickers cannot be
+confused with this year's.
 
 Because this endpoint hands out working URLs for codes nobody has seen yet, it is
 guarded by a secret token in the query string rather than by a login.
@@ -58,7 +59,7 @@ A freshly printed code means nothing to the system. The first scanner is asked
 for the patrol's **team number** — the large number on the scouts' arms, not the
 small number printed beside the QR code — and for **which map sheet** they are handing
 over, chosen from the set drawn up for the scouts. Confirming ties that sticker to that
-patrol, and that sheet, permanently.
+patrol and that sheet for the rest of the race.
 
 Because a patrol receives its first map at the start of the race, and **no patrol may
 start without having been photographed**, a photograph always exists at this point.
@@ -66,6 +67,21 @@ The scanner therefore confirms against the patrol's actual photo: *are these the
 scouts in the picture?* A mistyped team number is the mistake this catches, and it is
 worth catching — every later scan of that map is attributed to whichever patrol was
 named here.
+
+The photograph is shown large enough to actually recognise faces in — roughly a
+thousand pixels wide, not a list thumbnail. It is the identity check, and squinting at
+it is not a check.
+
+If the scanner is on duty at a checkpoint where maps are handed out, that checkpoint's
+sheet is preselected for them. It is only ever a suggestion: if the duty roster leaves
+any doubt about which sheet is being handed over, nothing is preselected and the scanner
+chooses.
+
+**A code can be re-bound.** If a patrol shrinks below three, its remaining scouts join
+another team and bring their map with them. So scanning a code belonging to a patrol
+that has left the race asks for the *holdnummer* of whoever holds it now, and moves the
+map — a different question, in different words, from binding a code that has never been
+used.
 
 ### 3. Every later scan is just a scan
 
@@ -142,9 +158,13 @@ flowchart TD
     B -- no --> C[Enter phone number]
     C --> B
     B -- yes --> D{Code known?}
-    D -- no --> E[Enter team number]
-    E --> F[Code bound to patrol]
+    D -- no --> E[Enter team number, pick map sheet]
+    E --> E2{Are these the scouts in the photo?}
+    E2 -- no --> E
+    E2 -- yes --> F[Code bound to patrol]
     F --> D
+    D -- yes, but patrol has left the race --> R[Enter the team holding the map now]
+    R --> F
     D -- yes --> G[Show patrol, get position]
     G --> H[Scan recorded]
 ```
@@ -174,7 +194,7 @@ every start. It is safe to delete.
 Scan data is also available to other tooling. Both of these are **machine
 endpoints guarded by a secret token in the query string**, not by the phone login:
 
-- `GET /qr?n=N` — the sticker-printing CSV described above
+- `GET /qr?n=N&token=…` — the sticker-printing CSV described above
 - `GET /geo` — all scans that have coordinates, as JSON, for map/GIS export
 
 The token is a different secret from the QR checksum secret, and it must not be
@@ -244,8 +264,7 @@ skan/
     ├── templates/         the HTML pages
     ├── nathejk/commands/  publishing events (the write side)
     ├── nathejk/table/     turning events into SQL tables (the read side)
-    ├── internal/login/    phone-number login
-    └── superfluids/       JetStream plumbing (being replaced)
+    └── internal/login/    phone-number login
 ```
 
 Pages are rendered server-side with Go's `html/template`. There is no frontend
@@ -253,16 +272,18 @@ build step and no SPA — deliberately. A scan has to load instantly on an unkno
 phone over a weak signal in a field at 2am, and the forms work even if JavaScript
 never runs.
 
-The streaming and projection plumbing is mid-migration: the in-repo `superfluids/`
-and `pkg/tablerow/` packages are being **replaced outright** by
-`github.com/jrgensen/stream` and `github.com/jrgensen/cqrs`, and projections are
-lifted to `github.com/nathejk/shared-go` once they stabilise.
-`nathejk/table/photo` and `photocover` are already written in the new shape and are
-the reference for new work; the other six projections still use the old one, and
-task 007 completes the switch and deletes the legacy packages.
+The streaming and projection plumbing now runs entirely on
+`github.com/jrgensen/stream` and `github.com/jrgensen/cqrs`; the in-repo `superfluids/`
+and `pkg/tablerow/` packages they replaced have been deleted. Projections are lifted to
+`github.com/nathejk/shared-go` once they stabilise, and several here — `photo`,
+`photocover`, `kort`, `spejderstatus`, `checkpoint`, `checkpersonnel` — are copies of
+other services' packages, kept close to their originals so they can be moved without
+edits.
 
 Patrol photographs are not stored here. The projections hold content-hash refs, and
-the bytes come from the `foto` service at `<foto-base-url>/photos/<ref>`.
+the bytes come from the `foto` service at `<foto-base-url>/photos/<ref>`. Skan never
+asks for the original file: it carries the camera's metadata, including where the
+picture was taken.
 
 Some directories were inherited from sibling Nathejk repos and never used here; they
 have now been deleted (task 012). This app was a PHP/Twig application before the port
@@ -276,10 +297,10 @@ to Go; those original templates are gone too.
 |---|---|
 | `YEAR` | The event year, e.g. `2026`. **Required** — the app refuses to start without it, deliberately, since a wrong year silently finds no data. |
 | `SECRET` | Seeds the QR URL checksum. **Required.** Changing it breaks printed stickers, so never expose it in a URL. |
-| `EXPORT_TOKEN` | *(not yet implemented)* The secret token for `/qr` and `/geo`, passed as a query parameter. Deliberately a different secret from `SECRET`. |
-| `FOTO_BASE_URL` | *(not yet implemented)* Base URL of the `foto` service, e.g. `https://foto.local.nathejk.dk`. Patrol photos live at `<base>/photos/<ref>`. |
+| `EXPORT_TOKEN` | **Required.** The secret token for `/qr` and `/geo`, passed as a query parameter. Deliberately a different secret from `SECRET`; a bad or missing token gets a `404`. |
+| `FOTO_BASE_URL` | **Required.** Base URL of the `foto` service, e.g. `https://foto.local.nathejk.dk`. Patrol photos live at `<base>/photos/<ref>`. |
 | `JETSTREAM_DSN` | NATS JetStream connection |
-| `DB_DSN` | MariaDB connection |
+| `DB_DSN` | MariaDB connection. Needs `multiStatements=true` — one projection's schema declares two tables at once. |
 | `WEBROOT` | Static file directory |
 
 ---
@@ -298,6 +319,13 @@ Short, honest list — details and more items in `.rules`, tracked as tasks unde
   so skan restores it locally. That one is a bug to fix upstream.
 - **There is no per-patrol remark.** The old app could show a red note about a patrol;
   no projection holds one, so the markup was removed rather than faked.
+- **Two copied projections were fixed here and diverge from their originals.**
+  `checkpoint` and `checkpersonnel` re-inserted every row on every replay; they now
+  upsert. Re-copying either from `hq` would silently undo that — diff first, and push the
+  fix upstream.
+- **No `checkgroup` projection.** Without it the `kort` package's own map query can't run,
+  so skan asks narrower questions of the tables it does have. Copying `checkgroup` in
+  would let that local code retire.
 
 ---
 
@@ -309,9 +337,5 @@ than writing to the database directly.
 
 Work is tracked on a file-based board in `roadmap/tasks/` — `open/`, `doing/` and
 `done/` folders holding one Markdown file per task, with the conventions in
-`roadmap/tasks/TASKS.md`. The gaps listed above are tasks 001–012.
-
-## Credits
-
-Default patrol placeholder photo:
-https://img.freepik.com/premium-vector/male-climbers-help-each-other-mountains-vector-silhouette-conceptual-business-scene-teamwork_556258-4616.jpg?w=2000
+`roadmap/tasks/TASKS.md`. All 20 filed tasks are done and `open/` is currently empty;
+the gaps listed above are open by choice, not by oversight.
