@@ -158,3 +158,22 @@ practice. It must be the well-tested one.
   test for the fallback. The repo has no handler-test harness, and adding one is a larger
   piece of work than this task; the behaviour is verified manually above and the gap is
   called out rather than quietly ticked.
+- 2026-09-10 12:20 — Raised the resolution of the photograph shown. The page served
+  `thumbRef` (256px), chosen to keep a scan light on a field connection. That optimised
+  the wrong thing: this photograph is the identity check that lets a scanner refuse a
+  wrong team number, and faces are not legible at 256px. `photos.go` now picks the
+  *smallest rendition at least 1024px wide* (`identificationRef`), falling back to the
+  display `Ref` when no rendition qualifies — 160 KB on live data instead of 15 KB, and
+  380 KB less than the 2000px display image. `coverPhotoThumbURL` became
+  `coverPhotoURL`, and `coverPhoto()` was extracted so both it and `coverPhotoRef` share
+  one resolution path.
+  **`coverPhotoRef` deliberately still returns the display ref**: it is the photograph's
+  identity, travelling on the form and compared on POST, so it must not move with the
+  rendition set.
+  `coordinates.html` and `map.html` gained `img-responsive` so the larger image cannot
+  overflow a phone. Added `TestIdentificationRefPicksAReadableRendition` (5 sub-tests:
+  picks 1024 over 2000 and 256, falls back with no renditions, ignores an empty ref,
+  falls back when every rendition is too small).
+  ✅ Verified live through the running service against 2026 data: team 2's scan page and
+  registration page both render `…/photos/aa5a1b5b…` — that team's `thumb1024` — while the
+  hidden `photoRef` remains the display ref `333d887c…`. Full gate green.

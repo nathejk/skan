@@ -15,6 +15,7 @@ import (
 	tables "nathejk.dk/nathejk/table"
 
 	"nathejk.dk/nathejk/table/patrulje"
+	"nathejk.dk/nathejk/table/photo"
 	"nathejk.dk/nathejk/table/qr"
 	"nathejk.dk/nathejk/table/scan"
 )
@@ -446,6 +447,62 @@ func TestMapPageDistinguishesUnusedFromDiscontinued(t *testing.T) {
 		// and drops the sheet the scouts already carry.
 		if !strings.Contains(raw, `name="reassign" value="1"`) {
 			t.Fatalf("the number form must preserve reassign\n%s", raw)
+		}
+	})
+}
+
+// TestIdentificationRefPicksAReadableRendition covers which rendition a scanner is shown.
+//
+// The photograph is the identity check, so it has to be big enough to recognise faces in —
+// but past that point extra pixels only cost time on a field connection.
+func TestIdentificationRefPicksAReadableRendition(t *testing.T) {
+	display := photo.Photo{
+		Ref: "display-2000",
+		Renditions: []photo.PhotoRendition{
+			{Name: "thumb256", Ref: "r256", Width: 256, Height: 192},
+			{Name: "thumb1024", Ref: "r1024", Width: 1024, Height: 768},
+			{Name: "thumb1600", Ref: "r1600", Width: 1600, Height: 1200},
+		},
+	}
+
+	t.Run("smallest rendition that is still legible", func(t *testing.T) {
+		if got := identificationRef(display); got != "r1024" {
+			t.Fatalf("got %q, want r1024", got)
+		}
+	})
+
+	t.Run("falls back to the display image when every rendition is too small", func(t *testing.T) {
+		p := photo.Photo{
+			Ref:        "display-2000",
+			Renditions: []photo.PhotoRendition{{Name: "thumb256", Ref: "r256", Width: 256}},
+		}
+		if got := identificationRef(p); got != "display-2000" {
+			t.Fatalf("got %q, want the display image", got)
+		}
+	})
+
+	t.Run("falls back for a photograph predating renditions", func(t *testing.T) {
+		if got := identificationRef(photo.Photo{Ref: "display-2000"}); got != "display-2000" {
+			t.Fatalf("got %q, want the display image", got)
+		}
+	})
+
+	t.Run("ignores a rendition with no ref", func(t *testing.T) {
+		p := photo.Photo{
+			Ref:        "display-2000",
+			Renditions: []photo.PhotoRendition{{Name: "thumb1024", Ref: "", Width: 1024}},
+		}
+		if got := identificationRef(p); got != "display-2000" {
+			t.Fatalf("got %q, want the display image", got)
+		}
+	})
+
+	t.Run("never the original", func(t *testing.T) {
+		// The projection does not expose the original at all — it carries the camera's
+		// metadata, including where the picture was taken — so there is nothing to leak
+		// here. This asserts the type stays that way.
+		if got := identificationRef(display); got == "original" {
+			t.Fatal("the original must never be served")
 		}
 	})
 }

@@ -165,7 +165,7 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		ref := a.coverPhotoRef(r.Context(), team.TeamID)
 		data["armNumber"] = fmt.Sprintf("%s-%d", team.TeamNumber, team.MemberCount)
 		data["photoRef"] = ref
-		data["photo"] = a.coverPhotoThumbURL(r.Context(), team.TeamID)
+		data["photo"] = a.coverPhotoURL(r.Context(), team.TeamID)
 		data["confirm"] = ref != "" && (len(spejderMaps) > 0 || carriedMapID != "")
 		data["noPhoto"] = ref == ""
 	}
@@ -427,7 +427,7 @@ func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 
 	data := scanResultData(
 		qr, patrulje,
-		a.coverPhotoThumbURL(r.Context(), patrulje.TeamID),
+		a.coverPhotoURL(r.Context(), patrulje.TeamID),
 		user.IsBandit(), catchCount, scanCount,
 	)
 

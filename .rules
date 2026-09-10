@@ -73,8 +73,19 @@ read them before writing a new one.
 - They store **content-hash refs, never bytes**, and `photo` never exposes the
   original (it carries the camera's metadata, including GPS). The bytes are served
   by the `foto` service at `<foto-base-url>/photos/<ref>`, e.g.
-  `https://foto.local.nathejk.dk/photos/e3875acc…a567`. The base URL **must come
+  `https://foto.local.nathejk.dk/photos/9706901b46b0…6bfb`. The base URL **must come
   from an environment variable** — never hardcode a host.
+- **The photograph shown is the smallest rendition at least 1024px wide** (`photos.go`,
+  `identificationRef`), falling back to the display `Ref` when no rendition qualifies.
+  The 256px `thumbRef` was used at first to keep the page light on a field connection,
+  and that was the wrong trade: the photograph *is* the identity check, and a scanner
+  squinting at a list thumbnail cannot confidently say "no, that is not this patrol".
+  On live data this costs 160 KB instead of 15 KB, and saves 380 KB against the 2000px
+  display image.
+- **`coverPhotoRef` deliberately stays the display ref**, not whichever rendition is
+  rendered: it is the photograph's identity, carried on the registration form and
+  compared in `doMapHandler`. Tying the confirmation to a rendition would break it the
+  moment the rendition set changed.
 - **A patrol cannot start the race without a photograph.** The race begins with the
   scouts receiving their first map, which does not happen until they have been
   photographed — so a photograph always exists by the time a QR code is registered.
