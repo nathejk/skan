@@ -721,6 +721,11 @@ the `prd` skill if a change needs a spec first.
 - Progressive enhancement: the form works without JS; geolocation and the
   `PUT /register` call are layered on top, with a typed-coordinate prompt as
   fallback.
+- **Every asset must be `https://`.** Scanners always arrive over TLS, so a plain-`http`
+  asset is blocked as mixed content and simply does not load — silently, unless someone is
+  watching the console. `base.html` referenced `http://nathejk.dk/favicon.ico` this way; the
+  icon is now served from `webroot/favicon.png` instead. Prefer local for small assets: it
+  also saves a cross-origin round trip on a field connection.
 
 ### Language
 - Domain terms stay Danish: *patrulje* (patrol), *spejder* (scout), *klan*
