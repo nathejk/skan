@@ -171,7 +171,8 @@ you're asked to confirm that this really is a new catch.
 
 So two scans half an hour apart just count, and so do two of your scans with
 another scanner's in between — only an immediate repeat by the same person asks a
-question.
+question. The question is asked **in the page**, with two buttons, and nothing is recorded
+until you answer.
 
 ```mermaid
 flowchart TD
@@ -358,5 +359,5 @@ than writing to the database directly.
 
 Work is tracked on a file-based board in `roadmap/tasks/` — `open/`, `doing/` and
 `done/` folders holding one Markdown file per task, with the conventions in
-`roadmap/tasks/TASKS.md`. All 25 filed tasks are done and `open/` is currently empty;
+`roadmap/tasks/TASKS.md`. All 26 filed tasks are done and `open/` is currently empty;
 the gaps listed above are open by choice, not by oversight.

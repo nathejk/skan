@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -609,6 +610,87 @@ func needsRescanConfirmation(latest *scan.Scan, scannerID string, now time.Time)
 	return elapsed < rescanWindow
 }
 
+// recentScans remembers each patrol's last scan as the app itself published it.
+//
+// # Why this exists
+//
+// The guard's real question is "what was this patrol's last scan", and the answer lived only
+// in the `scan` projection — which is written asynchronously by a JetStream consumer. So the
+// guard was reading a table that may not yet contain the scan published seconds earlier, and a
+// projection that is behind makes the guard **silently absent**: no history found, no question
+// asked, a duplicate recorded, nothing logged. HQ hit exactly that, scanning one code three
+// times without ever being asked.
+//
+// This is the same hazard `waitForRegistration` was added for (task 015), from the other side:
+// there the handler waits for the projection, here it cannot — nobody should stand in a field
+// while a consumer catches up.
+//
+// The publisher already knows what it published, so that knowledge is kept here and used when
+// it is *newer* than what the projection can see. The projection stays authoritative whenever
+// it is up to date, which preserves the rule exactly: another scanner's scan in between still
+// clears the question, because that scan reaches the projection and is newer than ours.
+//
+// In-process state is sound here because skan is a single instance, and losing it on restart is
+// harmless: the projection is then the only source, which is where this started.
+type recentScans struct {
+	mu sync.Mutex
+	by map[types.TeamID]scanMark
+}
+
+type scanMark struct {
+	scannerID string
+	uts       int64
+}
+
+func newRecentScans() *recentScans {
+	return &recentScans{by: map[types.TeamID]scanMark{}}
+}
+
+// record notes that a scan of this patrulje was just published.
+func (r *recentScans) record(teamID types.TeamID, scannerID string, at time.Time) {
+	if r == nil || teamID == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.by[teamID] = scanMark{scannerID: scannerID, uts: at.Unix()}
+}
+
+// latest returns what this process last published for a patrulje, if anything.
+func (r *recentScans) latest(teamID types.TeamID) (scanMark, bool) {
+	if r == nil || teamID == "" {
+		return scanMark{}, false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m, ok := r.by[teamID]
+	return m, ok
+}
+
+// mostRecentScan picks whichever of the projection's answer and this process's own record is
+// newer, so a lagging projection cannot hide a scan that was definitely made.
+//
+// Deliberately "newer wins" rather than "memory wins": if another scanner has scanned since,
+// the projection knows about a scan we never published, and that scan is what the rule is
+// about.
+func mostRecentScan(projection *scan.Scan, own scanMark, haveOwn bool) *scan.Scan {
+	if !haveOwn {
+		return projection
+	}
+	if projection != nil && projection.Uts >= own.uts {
+		return projection
+	}
+	return &scan.Scan{ScannerID: own.scannerID, Uts: own.uts}
+}
+
+// scanMarkString renders a scan for the guard's log line, including "none".
+func scanMarkString(s *scan.Scan) string {
+	if s == nil {
+		return "none"
+	}
+	return fmt.Sprintf("%s@%d", s.ScannerID, s.Uts)
+}
+
 // metres sanitises a client-supplied accuracy into a plain number of metres, or "".
 //
 // The browser reports a float, sometimes with a long fractional tail. Rounding to whole
@@ -660,13 +742,30 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 
 	// The guard runs server-side, against the patrol's scan history — not in the
 	// browser, and not on the QR code.
+	//
+	// The history comes from two places on purpose: the `scan` projection, and what this
+	// process itself published. See recentScans — a projection that is a few seconds behind
+	// would otherwise switch the guard off without a trace.
 	if !in.Confirm {
 		latest, err := a.models.Scan.LatestByTeam(r.Context(), patrulje.TeamID)
 		if err != nil && !errors.Is(err, tables.ErrRecordNotFound) {
 			// Never refuse a scan because the history could not be read. Recording a
 			// possible duplicate is recoverable; losing a catch is not.
 			log.Printf("reading latest scan for %s: %v", patrulje.TeamID, err)
-		} else if needsRescanConfirmation(latest, string(user.ID), time.Now()) {
+			latest = nil
+		}
+		own, haveOwn := a.recentScans.latest(patrulje.TeamID)
+		effective := mostRecentScan(latest, own, haveOwn)
+
+		// One line per scan, because the failure mode here is invisible: when the guard does
+		// not fire there is nothing to see afterwards, and "I was not asked" cannot be told
+		// apart from "the rule said record" without knowing what it looked at.
+		log.Printf("rescan guard: team=%s scanner=%s projection=%s own=%s(seen=%t) using=%s",
+			patrulje.TeamID, user.ID,
+			scanMarkString(latest), fmt.Sprintf("%s@%d", own.scannerID, own.uts), haveOwn,
+			scanMarkString(effective))
+
+		if needsRescanConfirmation(effective, string(user.ID), time.Now()) {
 			// Not recorded yet — the page asks, then re-sends with confirm set. This is
 			// deliberately not a silent drop: the scanner must be able to say yes and
 			// have it count.
@@ -688,6 +787,9 @@ func (a *App) registerHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Remembered immediately, so the next scan is guarded whether or not the projection has
+	// caught up by then.
+	a.recentScans.record(patrulje.TeamID, string(user.ID), time.Now())
 
 	a.writeJSON(w, http.StatusCreated, Envelope{"status": "ok"}, nil)
 }

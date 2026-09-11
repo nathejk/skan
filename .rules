@@ -623,6 +623,19 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   within 30 minutes gets a confirmation prompt via a `409` from `PUT /register`. The
   `scan` primary key is `(qrId, uts, scannerId)`, so only the *same* scanner twice in
   one second is deduped — a double-submit, not two catches.
+- **The rescan question is markup, never `window.confirm`** (task 026). Browsers may suppress
+  native dialogs, and a suppressed dialog **still returns a value** — so the answer becomes the
+  browser's rather than the scanner's, silently either counting a duplicate or dropping a
+  catch. HQ hit this: three scans of one code, no question. A test fails if `window.confirm`
+  returns to `coordinates.html`.
+- **The rescan guard must not depend on the projection having caught up** (task 026). It reads
+  `Scan.LatestByTeam` *and* `recentScans`, an in-process memory of what this handler published,
+  and uses whichever is **newer**. Newer-wins, not memory-wins: another scanner's scan in
+  between reaches only the projection, and that scan is what the rule is about. A lagging
+  projection used to switch the guard off with no trace — the same hazard as task 015 from the
+  other side, except a handler cannot wait here.
+  Every unconfirmed scan logs `rescan guard: …` with both inputs and which was used, because
+  "I was not asked" is otherwise indistinguishable from "the rule said record".
 - The geolocation fallback shows a Leaflet map and records the marker with
   `locationSource=manual` (task 016). A GPS fix also records `locationAccuracy` in
   metres; a hand-placed marker deliberately has none, because there is no measurement
@@ -713,6 +726,7 @@ picking up, creating or updating a task.
 | 023 | Remember the scanner's own last position; stop leaking the patrol's | high | **done** | 016 |
 | 024 | Only offer map sheets that carry a QR code | high | **done** | 017, 019 |
 | 025 | Hand map sheets out in order | high | **done** | 017, 024 |
+| 026 | Rescan guard never asked — dialog + projection lag | high | **done** | 004 |
 
 **Open: none.** Every filed task is done; see *Known deviations* for what remains
 unresolved by choice.

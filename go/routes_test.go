@@ -527,6 +527,118 @@ func TestMapPageRefusesADiscontinuedPatrol(t *testing.T) {
 	}
 }
 
+// TestMostRecentScanSurvivesALaggingProjection covers the hole that let three scans of one
+// code be recorded without a single question.
+//
+// The guard read only the `scan` projection, which a JetStream consumer writes asynchronously.
+// While that read does not yet include the scan published seconds ago, the guard finds no
+// history, asks nothing, records a duplicate, and logs nothing. So the app also remembers what
+// it published itself, and the *newer* of the two answers wins.
+func TestMostRecentScanSurvivesALaggingProjection(t *testing.T) {
+	now := time.Date(2026, 9, 12, 23, 30, 0, 0, time.UTC)
+	ago := func(d time.Duration) int64 { return now.Add(-d).Unix() }
+
+	t.Run("the projection has not caught up with our own scan", func(t *testing.T) {
+		// What HQ hit: nothing visible in the projection yet.
+		got := mostRecentScan(nil, scanMark{scannerID: "me", uts: ago(20 * time.Second)}, true)
+		if !needsRescanConfirmation(got, "me", now) {
+			t.Fatal("a scan this process published 20s ago must still be guarded")
+		}
+	})
+
+	t.Run("the projection is behind by one scan", func(t *testing.T) {
+		stale := &scan.Scan{ScannerID: "me", Uts: ago(40 * time.Minute)}
+		got := mostRecentScan(stale, scanMark{scannerID: "me", uts: ago(1 * time.Minute)}, true)
+		if !needsRescanConfirmation(got, "me", now) {
+			t.Fatal("the newer of the two answers must win, or the guard reads ancient history")
+		}
+	})
+
+	t.Run("another scanner since is still what the rule is about", func(t *testing.T) {
+		// The projection knows about a scan this process never published. Newer wins, so the
+		// question is correctly not asked: somebody else scanned in between.
+		someoneElse := &scan.Scan{ScannerID: "you", Uts: ago(10 * time.Second)}
+		got := mostRecentScan(someoneElse, scanMark{scannerID: "me", uts: ago(2 * time.Minute)}, true)
+		if needsRescanConfirmation(got, "me", now) {
+			t.Fatal("another scanner in between clears the question — the rule must not change")
+		}
+	})
+
+	t.Run("no memory of our own falls back to the projection", func(t *testing.T) {
+		p := &scan.Scan{ScannerID: "me", Uts: ago(1 * time.Minute)}
+		if got := mostRecentScan(p, scanMark{}, false); got != p {
+			t.Fatal("without a local record the projection is the only answer")
+		}
+		if mostRecentScan(nil, scanMark{}, false) != nil {
+			t.Fatal("a patrol never scanned has no history at all")
+		}
+	})
+
+	t.Run("recording then reading round-trips", func(t *testing.T) {
+		r := newRecentScans()
+		if _, ok := r.latest("team-1"); ok {
+			t.Fatal("nothing recorded yet")
+		}
+		r.record("team-1", "me", now)
+		m, ok := r.latest("team-1")
+		if !ok || m.scannerID != "me" || m.uts != now.Unix() {
+			t.Fatalf("got %+v, ok=%v", m, ok)
+		}
+		// A nil receiver is safe: tests and any handler built by hand may not set it.
+		var nilled *recentScans
+		nilled.record("team-1", "me", now)
+		if _, ok := nilled.latest("team-1"); ok {
+			t.Fatal("a nil recentScans must report nothing rather than panic")
+		}
+	})
+}
+
+// TestRescanQuestionIsAskedInThePage guards the fix for a scan that was counted without
+// anyone being asked.
+//
+// The question used to be a native window.confirm(). Browsers may suppress those, and a
+// suppressed dialog still returns a value — so the answer was decided by the browser's dialog
+// policy rather than by the scanner: silently confirmed (a duplicate catch) or silently
+// declined (a lost catch). Both are wrong, and both are invisible. The question must therefore
+// be markup.
+func TestRescanQuestionIsAskedInThePage(t *testing.T) {
+	data := scanResultData(&qr.QR{ID: "7"}, testTeam(), "", false, 1, 2)
+	data["lastLatitude"] = ""
+	data["lastLongitude"] = ""
+
+	ts, err := template.ParseFS(fs, "templates/base.html", "templates/coordinates.html")
+	if err != nil {
+		t.Fatalf("parsing templates: %v", err)
+	}
+	var out bytes.Buffer
+	if err := ts.ExecuteTemplate(&out, "base", data); err != nil {
+		t.Fatalf("executing template: %v", err)
+	}
+	raw := out.String()
+
+	if strings.Contains(raw, "window.confirm") {
+		t.Error("the rescan question must not be a native dialog: browsers may suppress it, " +
+			"and the suppressed answer is the browser's rather than the scanner's")
+	}
+	for _, want := range []string{`id="askMessage"`, `id="confirmScan"`, `id="cancelScan"`} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("missing %s: the question needs somewhere to be asked and answered", want)
+		}
+	}
+	// Both answers must be reachable, and cancelling must not read like a failure.
+	body := visibleText(raw)
+	for _, want := range []string{
+		"Ja, tæl det som en ny scanning",
+		"Nej, det var et uheld",
+		"Intet er registreret, før du svarer",
+		"Fint — scanningen er ikke registreret",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q\n%s", want, body)
+		}
+	}
+}
+
 // TestSheetsInReachFollowTheHandoutOrder covers the sequential handout rule: a patrol that
 // has not been given sheet 1 cannot be given sheet 2, and the sheet they are due is the
 // default.

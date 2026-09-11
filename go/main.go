@@ -36,7 +36,8 @@ var Version = "unset"
 func main() {
 	ctx := context.Background()
 	app := App{
-		Logger: logging.Configure(Version),
+		Logger:      logging.Configure(Version),
+		recentScans: newRecentScans(),
 	}
 	app.configure()
 

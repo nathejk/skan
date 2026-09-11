@@ -3,13 +3,19 @@
 {{define "content"}}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-#main .working, #main .success, #main .picker, #main.working .error, #main.success .error, #main.picking .error { display:none; }
-#main.working .working, #main.success .success, #main.picking .picker { display:block; }
+#main .working, #main .success, #main .picker, #main .asking, #main .cancelled, #main.working .error, #main.success .error, #main.picking .error, #main.asking .error, #main.cancelled .error { display:none; }
+#main.working .working, #main.success .success, #main.picking .picker, #main.asking .asking, #main.cancelled .cancelled { display:block; }
 #map { height: 60vh; min-height: 260px; margin: 10px 0; border-radius: 4px; }
 </style>
 <main id="main">
     <div class="error starter-template">
         <p>Din fangst er ikke registreret.</p>
+    </div>
+    {{/* Cancelling is not the same as failing, and must not read like it: one is the scanner
+         getting what they asked for, the other is a scan to worry about. */}}
+    <div class="cancelled starter-template">
+        <p class="lead">Fint — scanningen er ikke registreret.</p>
+        <p>Scan igen, hvis du fanger patruljen på ny.</p>
     </div>
     <div class="working starter-template">
         <h1>Finder position</h1>
@@ -35,6 +41,22 @@
             Gem position og registrér scanning
         </button>
         <p><small>Positionen bliver gemt som manuelt sat.</small></p>
+    </div>
+
+    {{/* The rescan question, asked in the page rather than with window.confirm().
+
+         A native dialog looked like the obvious choice and was the wrong one: browsers may
+         suppress alert/confirm, and a suppressed dialog still *returns* a value. Whichever
+         way it goes is silent — either the scan is dropped without anyone being asked, or,
+         as HQ hit, it is recorded as a fresh catch without anyone being asked. A decision
+         that changes what is counted cannot depend on a browser's dialog policy. */}}
+    <div class="asking starter-template">
+        <h1>Er dette en ny scanning?</h1>
+        <p class="lead" id="askMessage"></p>
+        <button id="confirmScan" class="btn btn-primary btn-lg btn-block">Ja, tæl det som en ny scanning</button>
+        <button id="cancelScan" class="btn btn-default btn-lg btn-block">Nej, det var et uheld</button>
+        <p><small>Vi spørger, fordi du lige har scannet denne patrulje. Intet er registreret,
+        før du svarer.</small></p>
     </div>
 
       <div class="success starter-template">
@@ -139,15 +161,40 @@ async function put(data, confirmed) {
             if (body && body.message) { message = body.message }
         } catch (e) { /* keep the default question */ }
 
-        if (window.confirm(message)) {
-            return put(data, true)
-        }
-        // Declined: nothing was recorded, and the page says so.
-        main.className = ''
+        ask(message, data)
         return
     }
 
     main.className = response.ok ? 'success' : ''
+}
+
+// ask puts the rescan question on the page and waits for a tap.
+//
+// Nothing has been recorded at this point: the server answered 409 instead of writing the
+// scan, so both answers are still open. Saying yes re-sends with confirm set, which the
+// server records; saying no leaves the scan unrecorded and says so plainly, because a
+// scanner who meant to cancel and a scanner whose scan vanished must not see the same page.
+function ask(message, data) {
+    document.getElementById('askMessage').textContent = message
+    main.className = 'asking'
+
+    const yes = document.getElementById('confirmScan')
+    const no = document.getElementById('cancelScan')
+
+    // Answering must be possible exactly once. Without this a double-tap on a phone sends
+    // two confirmed scans, which is the very thing the question exists to prevent.
+    let answered = false
+    yes.onclick = function () {
+        if (answered) { return }
+        answered = true
+        main.className = 'working'
+        put(data, true)
+    }
+    no.onclick = function () {
+        if (answered) { return }
+        answered = true
+        main.className = 'cancelled'
+    }
 }
 
 function register(data) { put(data, false) }

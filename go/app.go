@@ -59,6 +59,11 @@ type App struct {
 	//template  *template.Template
 	models   data.Models
 	commands commands.Commands
+
+	// recentScans is the rescan guard's memory of what this process published, used when the
+	// scan projection has not caught up yet. Nil is safe — the methods tolerate it — so tests
+	// that build an App by hand need not set it.
+	recentScans *recentScans
 }
 
 func (a *App) configure() {
