@@ -25,12 +25,37 @@ func (c *consumer) Consumes() (subjs []cqrs.Subject) {
 		// bringing their old map — so a scan of its code must ask who holds it now rather
 		// than crediting a team that is no longer running.
 		cqrs.SubjectFromStr("NATHEJK:*.patrulje.*.status.changed"),
+		// HQ's operational note for banditter and postmandskab. Written in hq, read here:
+		// a "fuld stop" note has to reach the person standing in front of the patrol, and
+		// this page is the only place they look.
+		cqrs.SubjectFromStr("NATHEJK:*.patrulje.*.remark.set"),
 	}
 }
 
 func (c *consumer) HandleMessage(msg cqrs.Message) error {
 	//log.Printf("patrulje.go RECEIVED %q", msg.Subject().Subject())
 	switch true {
+	// Checked before the four-part patterns below. This subject has six parts, so
+	// `NATHEJK.*.patrulje.*.updated` would not match it — but the reverse ordering has
+	// bitten this codebase before (see the spejderstatus consumer), so keep the specific
+	// one first.
+	case msg.Subject().Match("NATHEJK.*.patrulje.*.remark.set"):
+		var body RemarkSet
+		if err := msg.Body(&body); err != nil {
+			return err
+		}
+		// The whole note is restated by every event, so this is a plain overwrite: no
+		// IF(...) guard against an empty value, because clearing the note is a thing an
+		// operator does deliberately and must not be silently ignored.
+		sql := fmt.Sprintf("UPDATE patrulje SET remark=%s, remarkSeverity=%s WHERE teamId=%s",
+			tables.Quote(body.Remark),
+			tables.Quote(body.Severity),
+			tables.Quote(string(body.TeamID)),
+		)
+		if err := c.w.Consume(sql); err != nil {
+			return err
+		}
+
 	case msg.Subject().Match("NATHEJK.*.patrulje.*.signedup"):
 		var body messages.NathejkTeamSignedUp
 		if err := msg.Body(&body); err != nil {

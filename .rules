@@ -674,10 +674,21 @@ Flag or fix these deliberately; don't quietly copy the pattern.
 - A handler that publishes an event and then redirects to a page which reads the
   resulting projection must wait for it to catch up — see `waitForRegistration`
   (task 015). `stream/caughtup` is a boot sentinel and cannot help with a single write.
-- There is **no per-patrol remark**. `coordinates.html` used to reference `.remark`
-  (the PHP app's `noticeText`, shown in red to both roles) but no projection holds such
-  a field, so the markup was removed rather than faked. Reintroducing it needs somewhere
-  for the text to live first.
+- **HQ's per-patrol remark is shown on the scan page and the registration page** (task 027).
+  `patrulje` folds `patrulje.*.remark.set` (copied from hq, but quoted with `tables.Quote`),
+  and `addRemark` gives it to **both roles** — it is an instruction from HQ, not race
+  progress. Two severities that must stay visually far apart: `information` is a subtle
+  yellow box below the head count, `stop` ("fuld stop") a red box above everything.
+  **An empty remark is off whatever the severity says, and `inactive` is off too** — the
+  rule lives in `Patrulje.RemarkInForce()`, and the keys are absent from the template data
+  entirely when there is no note, which is almost every patrol.
+  On `map.html` the stop box sits **outside every branch**, because it is true whichever
+  question that page is asking; it does **not** block the registration, since the sheet is
+  already in the scouts' hands and refusing would leave its code unattributed too.
+  The severity constants and `RemarkSet` are duplicated from hq and should move to
+  `shared-go`.
+  Note this makes `patrulje` a **locally diverged copy** (like `checkpoint`): re-copying it
+  from hq would reintroduce `%q` and drop the schema migration. Diff before you do.
 - The year slug used by the projections' `year` **column** is a separate concern
   from `YEAR`: a projection must take it from the message subject, so a replay of an
   older year is not relabelled with the current one. `qr` and `scan` now do this;
@@ -727,6 +738,7 @@ picking up, creating or updating a task.
 | 024 | Only offer map sheets that carry a QR code | high | **done** | 017, 019 |
 | 025 | Hand map sheets out in order | high | **done** | 017, 024 |
 | 026 | Rescan guard never asked — dialog + projection lag | high | **done** | 004 |
+| 027 | Show HQ's remark on the scan page | high | **done** | 003 |
 
 **Open: none.** Every filed task is done; see *Known deviations* for what remains
 unresolved by choice.

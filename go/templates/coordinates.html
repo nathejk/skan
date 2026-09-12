@@ -61,6 +61,27 @@
 
       <div class="success starter-template">
 
+        {{/* HQ's note about this patrol, and the only thing on this page that may outrank
+             the head count.
+
+             Two severities, deliberately far apart in loudness. "Fuld stop" means the
+             patrol must not be sent on, so it goes above everything else, in red, with the
+             heading spelling out what it is — a scanner in the dark who scrolls past it has
+             not been told. "Information" is worth knowing but changes nothing, so it sits
+             below the head count as a subtle yellow note.
+
+             Absent for almost every patrol: no key is set unless HQ has a note in force, so
+             nothing renders at all in the ordinary case. Both roles see it — this is an
+             instruction from HQ, not race progress. */}}
+        {{ if and .remark .remarkStops }}
+        <div class="alert alert-danger" style="margin-top:0;border:3px solid #a94442;font-size:20px">
+          <h2 style="margin-top:0">FULD STOP</h2>
+          <p style="margin:0"><strong>Patruljen må ikke sendes videre.</strong></p>
+          <p style="margin:10px 0 0">{{ .remark }}</p>
+          <p style="margin:10px 0 0"><small>Kontakt HQ med det samme.</small></p>
+        </div>
+        {{ end }}
+
         <h1>{{ .armNumber }}. {{ .team.Name }}</h1>
         {{ if .photo }}
         <div class="row">
@@ -81,6 +102,12 @@
             <p style="margin:6px 0 0"><small>Tæl dem, og kontakt HQ hvis tallet ikke passer.</small></p>
           </div>
         </div>
+
+        {{ if and .remark (not .remarkStops) }}
+        <div class="alert alert-warning">
+          <strong>Info fra HQ:</strong> {{ .remark }}
+        </div>
+        {{ end }}
 
         {{ if .countChanged }}
         {{/* The armband shows the number the patrol started with, so once members leave or

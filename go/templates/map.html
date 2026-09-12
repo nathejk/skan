@@ -11,6 +11,21 @@
          The difference decides what to ask and what to promise, so the two are never
          described with the same words. `reassign` is what tells them apart. */}}
     <div class="starter-template">
+        {{/* HQ's note, above everything including the heading.
+
+             A "fuld stop" is shown in every branch a team is known in — confirmation,
+             discontinued, missing photograph — because it is true regardless of which
+             question this page is asking, and putting it inside one branch is how a scanner
+             hands over a map without ever being told. It deliberately does not block the
+             registration: the sheet in the scouts' hands still has to be bound to them. */}}
+        {{ if and .remark .remarkStops }}
+        <div class="alert alert-danger" style="border:3px solid #a94442;font-size:20px">
+          <h2 style="margin-top:0">FULD STOP</h2>
+          <p style="margin:0"><strong>Patruljen må ikke sendes videre.</strong></p>
+          <p style="margin:10px 0 0">{{ .remark }}</p>
+          <p style="margin:10px 0 0"><small>Udlever kortet, men kontakt HQ med det samme.</small></p>
+        </div>
+        {{ end }}
         <h1>{{ if .discontinued }}Patruljen er udgået{{ else if .reassign }}Hvem har kortet nu?{{ else }}Tilknyt patrulje{{ end }}</h1>
         {{ if .discontinued }}
         {{/* The team that was *typed*, not the one that had the code — keep this distinct
@@ -37,6 +52,15 @@
         <div class="alert alert-warning">
           <strong>Vær opmærksom:</strong> holdet startede med {{ .team.MemberCount }}, men er nu
           {{ .team.ActiveMemberCount }}. Armnømmeret viser stadig {{ .team.MemberCount }}.
+        </div>
+        {{ end }}
+
+        {{/* The subtle severity, next to the head count: worth knowing before handing over
+             a map, but it changes nothing about the handover. Only in this branch, since
+             the others are either an error state or have no patrol to say it about. */}}
+        {{ if and .remark (not .remarkStops) }}
+        <div class="alert alert-warning">
+          <strong>Info fra HQ:</strong> {{ .remark }}
         </div>
         {{ end }}
 

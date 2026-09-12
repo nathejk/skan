@@ -30,6 +30,28 @@ type Patrulje struct {
 	// ActiveMemberCount is how many members are still on the route, maintained by the
 	// spejderstatus projection.
 	ActiveMemberCount int `json:"activeMemberCount"`
+
+	// Remark is HQ's operational note about this patrol, shown to whoever scans it;
+	// RemarkSeverity says how loudly. Both are written by hq — see messages.go.
+	Remark         string `json:"remark"`
+	RemarkSeverity string `json:"remarkSeverity"`
+}
+
+// RemarkInForce reports whether there is a note to show at all.
+//
+// An empty remark is off regardless of severity: there is nothing to display, and an empty
+// box would be worse than no box. `inactive` is a note HQ deliberately stood down, so it is
+// off too — the text is kept only so it can be put back without retyping.
+func (p Patrulje) RemarkInForce() bool {
+	if p.Remark == "" {
+		return false
+	}
+	return p.RemarkSeverity == RemarkSeverityInformation || p.RemarkSeverity == RemarkSeverityStop
+}
+
+// RemarkStops reports whether the note is a "fuld stop": the patrol must not be sent on.
+func (p Patrulje) RemarkStops() bool {
+	return p.RemarkInForce() && p.RemarkSeverity == RemarkSeverityStop
 }
 
 // Discontinued reports whether the patrol has left the race.
@@ -56,7 +78,24 @@ func New(w cqrs.Writer, r *sql.DB) *table {
 	if err := w.Consume(table.CreateTableSql()); err != nil {
 		log.Fatalf("Error creating table %q", err)
 	}
+	for _, stmt := range schemaMigrations {
+		if err := w.Consume(stmt); err != nil {
+			log.Fatalf("Error migrating patrulje table %q", err)
+		}
+	}
 	return table
+}
+
+// schemaMigrations brings an existing database up to the current shape.
+//
+// CREATE TABLE IF NOT EXISTS is a no-op wherever the table already exists, so a column added
+// to table.sql is silently absent from every database that has booted once — and the remark
+// consumer's UPDATE would then fail with "Unknown column" on every note HQ writes. Entries
+// run on every boot and must be idempotent; `IF NOT EXISTS` is MariaDB's and is what makes
+// that safe.
+var schemaMigrations = []string{
+	`ALTER TABLE patrulje ADD COLUMN IF NOT EXISTS remark TEXT NOT NULL DEFAULT ""`,
+	`ALTER TABLE patrulje ADD COLUMN IF NOT EXISTS remarkSeverity VARCHAR(20) NOT NULL DEFAULT ""`,
 }
 
 //go:embed table.sql

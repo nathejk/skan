@@ -28,5 +28,17 @@ CREATE TABLE IF NOT EXISTS patrulje (
     -- **A started team with zero active members is discontinued.** No event says so and
     -- none needs to: move a member back in and the recompute makes the team active again.
     activeMemberCount INT NOT NULL DEFAULT 0,
+
+    -- HQ's operational note for banditter og postmandskab ("Info til banditter og
+    -- postmandskab"), and how loudly to show it. Authored in hq; this projection only
+    -- folds `patrulje.*.remark.set`.
+    --
+    -- remarkSeverity doubles as the on/off switch: `inactive` means the note is filed but
+    -- not in force, which is why it is one field rather than a note plus a boolean that
+    -- could disagree with it. "" is an unused note, the state almost every patrol is in --
+    -- and an empty remark is off whatever the severity says, since there is nothing to show.
+    remark TEXT NOT NULL DEFAULT "",
+    remarkSeverity VARCHAR(20) NOT NULL DEFAULT "",
+
     PRIMARY KEY (teamId)
 );

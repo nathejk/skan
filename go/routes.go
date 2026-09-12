@@ -168,6 +168,13 @@ func (a *App) mapHandler(w http.ResponseWriter, r *http.Request) {
 		"suggestedMapName": suggestedMapName,
 	}
 	if team != nil {
+		// HQ's note travels to this page too. Handing over a map is the other moment a
+		// scanner stands in front of the patrol, and "fuld stop" reaching only the scan page
+		// means a patrol under a stop order can be given their next map by someone who was
+		// never told. It does **not** block the registration: the map in their hands still
+		// has to be bound to them, and refusing would leave the code unattributed as well.
+		addRemark(data, team)
+
 		// The confirmation is only meaningful against the patrol's real photograph, so
 		// the ref the scanner is shown is carried in the form and checked on POST.
 		ref := a.coverPhotoRef(r.Context(), team.TeamID)
@@ -454,10 +461,35 @@ func scanResultData(qrRow *qr.QR, team *patrulje.Patrulje, photoURL string, isBa
 		// think something is wrong, or worse, not notice that it is.
 		"countChanged": team.ActiveMemberCount != team.MemberCount,
 	}
+
+	// HQ's note about this patrol, shown to **both** roles. It is not race progress: it is
+	// an instruction from HQ to whoever is standing in front of these scouts, and a bandit
+	// needs "fuld stop" as much as crew does — more, since a bandit is the one likely to
+	// send them running again.
+	addRemark(data, team)
 	if !isBandit {
 		data["scanCount"] = scanCount
 	}
 	return data
+}
+
+// addRemark puts HQ's note about a patrol into template data, if there is one in force.
+//
+// Shared by the scan page and the registration page: both are moments where someone is
+// standing in front of these scouts, which is exactly who the note is written for. A "fuld
+// stop" that only appears on one of the two screens is a note the scanner can be handed a
+// map without ever seeing.
+//
+// Almost every patrol has no note, so the keys are **absent** rather than empty and the
+// templates render nothing at all in the ordinary case. An empty remark is off whatever the
+// severity says, and `inactive` is a note HQ stood down — both are decided by
+// RemarkInForce, not here.
+func addRemark(data map[string]any, team *patrulje.Patrulje) {
+	if team == nil || !team.RemarkInForce() {
+		return
+	}
+	data["remark"] = team.Remark
+	data["remarkStops"] = team.RemarkStops()
 }
 
 func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {

@@ -117,6 +117,103 @@ func TestScanResultDataGivesCrewEverything(t *testing.T) {
 	}
 }
 
+// TestRemarkVisibility is the on/off rule: an empty note is off whatever the severity
+// says, and `inactive` is a note HQ deliberately stood down.
+//
+// Asserted on the data, not the markup, because "disabled" has to mean the text never
+// reaches the page — a stood-down note rendered invisibly is still a note on the phone.
+func TestRemarkVisibility(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		remark    string
+		severity  string
+		wantShown bool
+		wantStops bool
+	}{
+		{name: "no note at all", remark: "", severity: ""},
+		{name: "severity without text", remark: "", severity: patrulje.RemarkSeverityStop},
+		{name: "stood down", remark: "Skadet spejder", severity: patrulje.RemarkSeverityInactive},
+		{name: "text without severity", remark: "Skadet spejder", severity: ""},
+		{
+			name: "information", remark: "Har mistet en lommelampe",
+			severity: patrulje.RemarkSeverityInformation, wantShown: true,
+		},
+		{
+			name: "fuld stop", remark: "Ring til HQ før de sendes videre",
+			severity: patrulje.RemarkSeverityStop, wantShown: true, wantStops: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			team := testTeam()
+			team.Remark, team.RemarkSeverity = tc.remark, tc.severity
+
+			data := scanResultData(&qr.QR{ID: "7"}, team, "http://foto/x", false, 3, 99)
+			got, shown := data["remark"]
+			if shown != tc.wantShown {
+				t.Fatalf("remark shown = %v, want %v (%+v)", shown, tc.wantShown, data)
+			}
+			if !tc.wantShown {
+				return
+			}
+			if got != tc.remark {
+				t.Fatalf("got remark %q, want %q", got, tc.remark)
+			}
+			if data["remarkStops"] != tc.wantStops {
+				t.Fatalf("got remarkStops %v, want %v", data["remarkStops"], tc.wantStops)
+			}
+		})
+	}
+}
+
+// TestRemarkRendering checks the note reaches the page for both roles, and that the two
+// severities are told apart in the markup: "fuld stop" must be the red, in-your-face box,
+// information the subtle yellow one. A note rendered in the wrong box is the whole feature
+// failing quietly — the text is there, and nobody stops.
+func TestRemarkRendering(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		severity  string
+		wantClass string
+		dontWant  string
+	}{
+		{
+			name: "information is subtle", severity: patrulje.RemarkSeverityInformation,
+			wantClass: "alert-warning", dontWant: "alert-danger",
+		},
+		{
+			name: "stop is loud", severity: patrulje.RemarkSeverityStop,
+			wantClass: "alert-danger", dontWant: "Info fra HQ",
+		},
+	} {
+		for _, isBandit := range []bool{false, true} {
+			t.Run(tc.name, func(t *testing.T) {
+				ts, err := template.ParseFS(fs, "templates/base.html", "templates/coordinates.html")
+				if err != nil {
+					t.Fatalf("parsing templates: %v", err)
+				}
+				team := testTeam()
+				team.Remark, team.RemarkSeverity = "Ring til HQ", tc.severity
+
+				var out bytes.Buffer
+				data := scanResultData(&qr.QR{ID: "7"}, team, "http://foto/x", isBandit, 1, 99)
+				if err := ts.ExecuteTemplate(&out, "base", data); err != nil {
+					t.Fatalf("executing template: %v", err)
+				}
+				body := squashSpace(out.String())
+				if !strings.Contains(visibleText(body), "Ring til HQ") {
+					t.Fatalf("remark missing from the page (bandit=%v)\n%s", isBandit, body)
+				}
+				if !strings.Contains(body, tc.wantClass) {
+					t.Fatalf("output missing %q\n%s", tc.wantClass, body)
+				}
+				if strings.Contains(body, tc.dontWant) {
+					t.Fatalf("output contains %q, wrong severity box\n%s", tc.dontWant, body)
+				}
+			})
+		}
+	}
+}
+
 // squashSpace collapses whitespace runs so assertions are about wording, not about
 // where the template happens to wrap.
 func squashSpace(s string) string { return strings.Join(strings.Fields(s), " ") }
@@ -807,6 +904,78 @@ func TestUnreachableSheetsAreDisabled(t *testing.T) {
 	if !strings.Contains(raw, `<option value="k2" disabled>Deltagerkort 2 (ikke nået endnu)</option>`) {
 		t.Errorf("a sheet out of reach should be listed but disabled\n%s", raw)
 	}
+}
+
+// TestMapPageShowsRemark: the registration page is the other moment a scanner stands in
+// front of the patrol, so HQ's note has to reach it too.
+//
+// The "fuld stop" box is asserted in the missing-photograph branch as well as the ordinary
+// one: it is true whichever question the page is asking, and a stop confined to one branch is
+// a stop the scanner is not told about.
+func TestMapPageShowsRemark(t *testing.T) {
+	render := func(t *testing.T, severity string, mutate func(map[string]any)) string {
+		t.Helper()
+		team := testTeam()
+		team.Remark, team.RemarkSeverity = "Ring til HQ", severity
+
+		data := mapPageData(false)
+		data["team"] = team
+		data["armNumber"] = "42-5"
+		data["photoRef"] = "ref"
+		data["photo"] = "https://foto/photos/ref"
+		data["confirm"] = true
+		addRemark(data, team)
+		if mutate != nil {
+			mutate(data)
+		}
+
+		ts, err := template.ParseFS(fs, "templates/base.html", "templates/map.html")
+		if err != nil {
+			t.Fatalf("parsing templates: %v", err)
+		}
+		var out bytes.Buffer
+		if err := ts.ExecuteTemplate(&out, "base", data); err != nil {
+			t.Fatalf("executing template: %v", err)
+		}
+		return squashSpace(out.String())
+	}
+
+	t.Run("fuld stop", func(t *testing.T) {
+		body := render(t, patrulje.RemarkSeverityStop, nil)
+		if !strings.Contains(body, "FULD STOP") || !strings.Contains(visibleText(body), "Ring til HQ") {
+			t.Fatalf("the stop note is missing from the registration page\n%s", body)
+		}
+		// The note must not stop the code being bound: the sheet is in their hands either way.
+		if !strings.Contains(body, "tilknyt kortet") {
+			t.Fatalf("a stop note must not withdraw the registration\n%s", body)
+		}
+	})
+
+	t.Run("fuld stop with no photograph", func(t *testing.T) {
+		body := render(t, patrulje.RemarkSeverityStop, func(d map[string]any) {
+			d["confirm"], d["noPhoto"], d["photoRef"] = false, true, ""
+		})
+		if !strings.Contains(body, "FULD STOP") {
+			t.Fatalf("the stop note must survive the other branches of this page\n%s", body)
+		}
+	})
+
+	t.Run("information", func(t *testing.T) {
+		body := render(t, patrulje.RemarkSeverityInformation, nil)
+		if !strings.Contains(body, "Info fra HQ") {
+			t.Fatalf("the information note is missing\n%s", body)
+		}
+		if strings.Contains(body, "FULD STOP") {
+			t.Fatalf("an information note must not be shouted\n%s", body)
+		}
+	})
+
+	t.Run("stood down", func(t *testing.T) {
+		body := render(t, patrulje.RemarkSeverityInactive, nil)
+		if strings.Contains(visibleText(body), "Ring til HQ") {
+			t.Fatalf("an inactive note must not reach the page\n%s", body)
+		}
+	})
 }
 
 // TestOfferedSheetKeepsASuggestionHonest: the picker lists only sheets that carry a QR code,
