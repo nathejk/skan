@@ -103,6 +103,47 @@
           </div>
         </div>
 
+        {{/* Timeliness, for the crew member manning a post.
+
+             Placed directly under the head count because those are the two things the
+             scanner is here to check, and both have to survive being read in the dark at
+             arm's length. Hence the marker: a green or red block with one word in it, which
+             is what actually gets read, with the number underneath for whoever wants it.
+
+             The key is absent unless a verdict exists at all — the scanner is on a post,
+             the post has usable hours, and for a relative post the patrol has been seen at
+             an earlier one. So nothing renders for a bandit, for a scanner in the field, or
+             for a post hq has set no hours on, and a red marker can never come from a
+             defaulted zero. */}}
+        {{ with .timeliness }}
+        <div class="panel {{ if .OnTime }}panel-success{{ else }}panel-danger{{ end }}" style="margin-top:15px">
+          <div class="panel-heading" style="font-size:24px;font-weight:bold">
+            {{ if .OnTime }}&#9679; TIL TIDEN{{ else }}&#9679; OVERTID{{ end }}
+          </div>
+          <div class="panel-body">
+            {{ if .Relative }}
+            {{/* A relative post measures the stretch from the previous post, so the
+                 allowance is printed alongside the elapsed time: the number on its own
+                 cannot be checked, and a scanner who disagrees with the verdict needs to
+                 see what it was compared against. */}}
+            <p style="font-size:20px;margin:0">
+              <strong>{{ .Minutes }} min.</strong> siden sidste post
+              &mdash; der er afsat {{ .AllowedMinutes }} min.
+            </p>
+            {{ else if .OnTime }}
+            <p style="font-size:20px;margin:0">
+              Posten lukker om <strong>{{ .Minutes }} min.</strong>
+            </p>
+            {{ else }}
+            <p style="font-size:20px;margin:0">
+              Posten lukkede for <strong>{{ .Minutes }} min.</strong> siden
+            </p>
+            {{ end }}
+            <p style="margin:6px 0 0"><small>Gælder {{ .PostName }}.</small></p>
+          </div>
+        </div>
+        {{ end }}
+
         {{ if and .remark (not .remarkStops) }}
         <div class="alert alert-warning">
           <strong>Info fra HQ:</strong> {{ .remark }}

@@ -208,6 +208,47 @@ choose among them.
   `patruljemerged` is deprecated — it stored the conclusion rather than the input, which is
   why it needed `.merged` *and* `.splited`.
 
+### Is the patrol on time? (`checkpoints.go`, `data.CheckpointReader`)
+
+A scanner manning a post gets a green **TIL TIDEN** or red **OVERTID** marker on the scan
+page (task 028). Two kinds of post mean two different things by "on time", and hq's
+`checkpoint` projection carries both:
+
+| Configured | Reading shown |
+|---|---|
+| `openFromUts`/`openUntilUts` (static) | minutes until the post closes |
+| `openDuration` (relative, **stored in whole minutes**) | minutes since the last checkpoint, against that allowance |
+
+- **The scan page only.** Not the registration page: handing over a map is not an arrival to
+  be judged, and `map.html` already carries the sheet picker, the photo confirmation and HQ's
+  remark — a fourth claim on the same glance makes the ones that *block* the handover easier
+  to miss. `addTimeliness` is called from `scanHandler` alone; keep it that way.
+- **Being rostered on a post *is* the postmandskab test.** There is no such `userType` to
+  check — `personnel.userType` holds `gøgler` and `friend` in real data — and a
+  `checkpersonnel` row whose shift covers now is both the more accurate question and the only
+  one that identifies *which* post, without which there is no verdict to give. Two rostered
+  posts at once means no verdict: a patrol can be on time for one and late for the other.
+- **Crew-only, and not merely unrendered.** `scanTimeliness` refuses before either read for a
+  bandit. The verdict is derived from the post's hours and from where the patrol was last seen
+  on the route — exactly what task 023 was about.
+- **Nothing is a real answer.** No hours configured (most posts in the current plan), a fixed
+  range that does not make sense, or a relative post with no earlier checkpoint scan → no
+  marker. Each of those would otherwise render a confident marker built from a zero, and a
+  scanner cannot tell a computed green from a defaulted one. `HasFixedHours()` therefore
+  requires `openUntil` to be **after** `openFrom`: real data has `Post 1A` inverted, which
+  would have shown red to everyone on that post all night.
+- The clock a relative post measures against is the patrol's last scan **at a different
+  checkpoint**. A bandit catch en route does not restart the allowance, and without excluding
+  this post every patrol would arrive in 0 minutes — the colleague at the same post has just
+  scanned them. Fixed hours win when both are set: the wall-clock deadline is what the rest of
+  the field is held to.
+- Minutes are always a **magnitude**, with the sign carried by `OnTime`, and **rounded** — so
+  "0 minutter for sent" cannot appear beside a red marker.
+- The verdict travels as **one** template key holding the struct. `{{ if ne .onTime nil }}` is
+  not writable (comparing a bool to nil is a template error); a single absent key is the
+  remark's shape, and `{{ with .timeliness }}` works because a missing map key is nil while any
+  struct value is truthy.
+
 ### Event bodies this service extends (`nathejk/event`)
 
 Three fields live here because `shared-go` has nowhere for them, all added **additively**
@@ -355,7 +396,7 @@ skan/
     │                     #           photocover, kort, spejderstatus,
     │                     #           checkpoint, checkpersonnel
     │                     #   tables.Quote / tables.Datetime live in table/sql.go
-    └── maps.go, photos.go   # handler-side helpers for kort and photo
+    └── maps.go, photos.go, checkpoints.go   # handler-side helpers for kort, photo, checkpoint hours
 ```
 
 Several files were **inherited from sibling Nathejk repos and unused here**; they
@@ -364,7 +405,8 @@ the loose `pincode`/`registrant`/`spejderstatus`/`patruljestatus`/`confirm` file
 `nathejk/commands/{team,types}.go`, and
 `internal/data/{teams,members,users,tokens,permissions,signup,filters}.go`.
 `nathejk/table/errors.go` was kept, because `tables.ErrRecordNotFound` is live.
-`data.Models` is now exactly the six projections this service reads.
+`data.Models` is now exactly the projections this service reads — the six it has queriers for,
+plus the two narrow readers (`KortReader`, `CheckpointReader`) over hq's copied tables.
 
 ### Legacy note
 
@@ -397,6 +439,7 @@ full picture. **Crew may see everything.**
 | Total scan count (all scanners) | **no** | yes |
 | Checkpoint / crew scan activity, positions | **no** | yes |
 | Free-text remark about the patrol | yes | yes |
+| **On-time verdict at a post** | **no** | yes (only when manning that post) |
 
 Definitions:
 
@@ -407,6 +450,9 @@ Definitions:
   i.e. the number of scans of that patrol whose scanner is a senior. This is the
   one count a bandit is allowed to know.
 - **scan count** — total scans by anyone, crew included. Crew-only.
+- **on-time verdict** — whether the patrol is running to the post's opening hours
+  (task 028). Crew-only, and only shown to a scanner **manning that post**: it is derived
+  from the post's hours and from where the patrol was last seen on the route.
 
 ### Strength changes in both directions
 
@@ -739,6 +785,7 @@ picking up, creating or updating a task.
 | 025 | Hand map sheets out in order | high | **done** | 017, 024 |
 | 026 | Rescan guard never asked — dialog + projection lag | high | **done** | 004 |
 | 027 | Show HQ's remark on the scan page | high | **done** | 003 |
+| 028 | Tell postmandskab whether a patrol is on time | high | **done** | 003, 019 |
 
 **Open: none.** Every filed task is done; see *Known deviations* for what remains
 unresolved by choice.

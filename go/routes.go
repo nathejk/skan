@@ -574,11 +574,67 @@ func (a *App) scanHandler(w http.ResponseWriter, r *http.Request) {
 			data["lastLatitude"] = latest.Latitude
 			data["lastLongitude"] = latest.Longitude
 		}
+
+		// Whether this patrol is running to time, for the crew member manning the post.
+		//
+		// Crew-only, and not merely unrendered for a bandit: the verdict is derived from the
+		// post's opening hours and from where the patrol was last seen on the route, which is
+		// exactly the race progress a player may not learn. Reading it for a bandit would leak
+		// it whether or not the template used it — the lesson of task 023.
+		//
+		// Inside the same crew branch as the position above rather than a branch of its own,
+		// so "this is the route, and the route is crew information" is decided in one place.
+		if t, ok := a.scanTimeliness(r.Context(), user, patrulje.TeamID, time.Now()); ok {
+			addTimeliness(data, t)
+		}
 	}
 
 	if err := ts.ExecuteTemplate(w, "base", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// scanTimeliness is the verdict for the scan page, or nothing.
+//
+// The two reads live here rather than in the handler so the handler keeps reading as a
+// sequence of questions, and so the order of the guards is stated once:
+//
+//  1. A bandit gets nothing, and nothing is queried for them. A bandit is never rostered on a
+//     post anyway — checkpersonnel holds personnel ids — so this guard is about the second
+//     read, which is checkpoint activity and would be a leak on its own.
+//  2. A scanner not manning a post gets nothing. That is most scanners, and it is also the
+//     whole "is this postmandskab" test — see data.CheckpointReader.PostForScanner.
+//  3. The previous checkpoint scan is only read when the post actually measures against it.
+//     A fixed-hours post does not, and asking anyway would cost a query per scan for a value
+//     nothing uses.
+//
+// A failed read gives no verdict, and says so in the log. Every other outcome here is a
+// silence the scanner cannot tell apart from "this post has no hours", which is the one thing
+// that must not go unrecorded.
+func (a *App) scanTimeliness(ctx context.Context, user *login.User, teamID types.TeamID, now time.Time) (Timeliness, bool) {
+	if user == nil || user.IsBandit() {
+		return Timeliness{}, false
+	}
+
+	post, onPost, err := a.models.Checkpoint.PostForScanner(ctx, a.config.year, string(user.ID), now)
+	if err != nil {
+		log.Printf("reading the post for scanner %s: %v", user.ID, err)
+		return Timeliness{}, false
+	}
+	if !onPost {
+		return Timeliness{}, false
+	}
+
+	var previous time.Time
+	var hasPrevious bool
+	if !post.HasFixedHours() && post.HasRelativeHours() {
+		if previous, hasPrevious, err = a.models.Checkpoint.PreviousCheckpointScan(ctx, a.config.year, string(teamID), post.ID); err != nil {
+			log.Printf("reading the previous checkpoint scan of %s: %v", teamID, err)
+			return Timeliness{}, false
+		}
+	}
+
+	return postTimeliness(post, previous, hasPrevious, now)
 }
 
 func (a *App) qrHandler(w http.ResponseWriter, r *http.Request) {

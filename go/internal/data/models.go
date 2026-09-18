@@ -90,6 +90,23 @@ type KortInterface interface {
 	SheetForScanner(ctx context.Context, year, userID string, at time.Time) (KortSheet, bool, error)
 }
 
+// CheckpointInterface is the checkpoint plan as a scanner's page needs it.
+//
+// Narrow like KortInterface, and for the same reason: skan never plans a post — hq does —
+// and a scanner only needs to know which post they are on and when the patrol was last seen
+// at another one. See CheckpointReader.
+type CheckpointInterface interface {
+	// PostForScanner is the checkpoint this scanner mans right now, if exactly one.
+	// found=false is ordinary: most scanners are not on a post, and it is also the answer
+	// to "is this scanner postmandskab".
+	PostForScanner(ctx context.Context, year, userID string, at time.Time) (Post, bool, error)
+
+	// PreviousCheckpointScan is when the patrulje was last scanned at a *different*
+	// checkpoint — the clock a relative-hours post measures against. Crew-only: it is
+	// checkpoint activity, which a bandit may not learn.
+	PreviousCheckpointScan(ctx context.Context, year, teamID, excludePostID string) (time.Time, bool, error)
+}
+
 // Models is the read side as handlers see it: one interface per projection this
 // service actually reads.
 type Models struct {
@@ -102,4 +119,5 @@ type Models struct {
 	Photo      PhotoInterface
 	PhotoCover PhotoCoverInterface
 	Kort       KortInterface
+	Checkpoint CheckpointInterface
 }

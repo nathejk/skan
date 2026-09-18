@@ -140,6 +140,9 @@ func main() {
 		// Reads the tables korttable maintains, but asks a narrower question than the
 		// kort projection's own querier — see data.KortReader.
 		Kort: data.KortReader{DB: db.DB()},
+		// Reads the tables checkpointtable and checkpersonneltable maintain, for the same
+		// reason — see data.CheckpointReader.
+		Checkpoint: data.CheckpointReader{DB: db.DB()},
 	}
 	app.commands = commands.New(js, app.config.year)
 
