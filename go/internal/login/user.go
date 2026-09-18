@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/nathejk/shared-go/tables"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/data"
 )
@@ -143,9 +144,15 @@ func (a *auth) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 
 // userByPhone resolves a phone number to exactly one scanner, or refuses.
 //
-// Both projections are consulted, always. The previous version returned on the first
-// personnel hit and so could not notice a number registered as both — silently
-// giving a bandit the crew role.
+// Both crew sources and the senior projection are consulted, always. Crew are personnel
+// (gøgler, friend) **or** crew members (the 2026 crew pipeline) — either makes a scanner
+// crew, so both are checked before deciding. The previous version returned on the first
+// personnel hit and so could not notice a number registered as both crew and senior,
+// silently giving a bandit the crew role.
+//
+// "Crew" and "senior" are still the only conflict. Being in both crew sources is no
+// conflict at all — both mean crew — so the personnel identity is preferred when present
+// and the crew-member id is the fallback.
 func (a *auth) userByPhone(ctx context.Context, v string) (*User, error) {
 	phone := types.PhoneNumber(v)
 	if v == "" {
@@ -155,18 +162,36 @@ func (a *auth) userByPhone(ctx context.Context, v string) (*User, error) {
 	person, personErr := a.models.Personnel.GetByPhone(ctx, a.yearSlug, phone)
 	senior, seniorErr := a.models.Senior.GetByPhone(ctx, a.yearSlug, phone)
 
-	crew := personErr == nil && person != nil
+	// The crew-member projection is optional wiring: guard the nil so a Models without it
+	// (older callers, and tests that do not exercise crew members) still resolves.
+	var crewMemberID types.UserID
+	var crewMemberErr = tables.ErrRecordNotFound
+	if a.models.CrewMember != nil {
+		crewMemberID, crewMemberErr = a.models.CrewMember.GetByPhone(ctx, a.yearSlug, phone)
+	}
+
+	isPersonnel := personErr == nil && person != nil
+	isCrewMember := crewMemberErr == nil && crewMemberID != ""
+	crew := isPersonnel || isCrewMember
 	bandit := seniorErr == nil && senior != nil
 
 	switch {
 	case crew && bandit:
 		return nil, ErrAmbiguousRole
 
-	case crew:
+	case isPersonnel:
 		return &User{
 			ID:    person.ID,
 			Phone: person.Phone,
 			Type:  person.UserType,
+			Role:  RoleCrew,
+		}, nil
+
+	case isCrewMember:
+		return &User{
+			ID:    crewMemberID,
+			Phone: phone,
+			Type:  types.TeamTypeCrew,
 			Role:  RoleCrew,
 		}, nil
 

@@ -52,28 +52,49 @@ func (s stubSenior) GetByPhone(_ context.Context, year string, phone types.Phone
 	return &senior.Senior{MemberID: "senior-id", Phone: phone}, nil
 }
 
-func newAuth(crew, seniors map[string]string) *auth {
+// stubCrewMember answers GetByPhone from a phone -> year map, standing in for the 2026
+// crew pipeline: a number that is crew but has no personnel (gøgler/friend) row.
+type stubCrewMember struct{ byYear map[string]string }
+
+func (s stubCrewMember) GetByPhone(_ context.Context, year string, phone types.PhoneNumber) (types.UserID, error) {
+	if s.byYear[string(phone)] != year {
+		return "", tables.ErrRecordNotFound
+	}
+	return "crewmember-id", nil
+}
+
+func newAuth(crew, crewMembers, seniors map[string]string) *auth {
 	models := data.Models{
-		Personnel: stubPersonnel{byYear: crew},
-		Senior:    stubSenior{byYear: seniors},
+		Personnel:  stubPersonnel{byYear: crew},
+		CrewMember: stubCrewMember{byYear: crewMembers},
+		Senior:     stubSenior{byYear: seniors},
 	}
 	return New(models, testYear, func(http.ResponseWriter, *http.Request, PageData) {})
 }
 
 func TestUserByPhoneResolvesRole(t *testing.T) {
 	tests := []struct {
-		name     string
-		crew     map[string]string
-		seniors  map[string]string
-		phone    string
-		wantRole Role
-		wantErr  error
+		name        string
+		crew        map[string]string
+		crewMembers map[string]string
+		seniors     map[string]string
+		phone       string
+		wantRole    Role
+		wantErr     error
 	}{
 		{
 			name:     "personnel only is crew",
 			crew:     map[string]string{"11111111": testYear},
 			phone:    "11111111",
 			wantRole: RoleCrew,
+		},
+		{
+			// The 2026 crew pipeline: crew with no gøgler/friend row must still be able to
+			// log in and scan.
+			name:        "crew member only is crew",
+			crewMembers: map[string]string{"18181818": testYear},
+			phone:       "18181818",
+			wantRole:    RoleCrew,
 		},
 		{
 			name:     "senior only is bandit",
@@ -89,6 +110,23 @@ func TestUserByPhoneResolvesRole(t *testing.T) {
 			seniors: map[string]string{"33333333": testYear},
 			phone:   "33333333",
 			wantErr: ErrAmbiguousRole,
+		},
+		{
+			// Crew via the crew pipeline and senior is the same conflict, and refused for
+			// the same reason.
+			name:        "crew member and senior is refused",
+			crewMembers: map[string]string{"19191919": testYear},
+			seniors:     map[string]string{"19191919": testYear},
+			phone:       "19191919",
+			wantErr:     ErrAmbiguousRole,
+		},
+		{
+			// Personnel and crew member are both crew, so this is no conflict at all.
+			name:        "personnel and crew member is crew",
+			crew:        map[string]string{"20202020": testYear},
+			crewMembers: map[string]string{"20202020": testYear},
+			phone:       "20202020",
+			wantRole:    RoleCrew,
 		},
 		{
 			// The case that actually occurs: in the live data 12 numbers are crew in one
@@ -127,7 +165,7 @@ func TestUserByPhoneResolvesRole(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			user, err := newAuth(tt.crew, tt.seniors).userByPhone(context.Background(), tt.phone)
+			user, err := newAuth(tt.crew, tt.crewMembers, tt.seniors).userByPhone(context.Background(), tt.phone)
 
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
@@ -187,7 +225,7 @@ func TestLoginHandlerWritesNoCookieWhenRefused(t *testing.T) {
 }
 
 func TestLoginHandlerStoresResolvedRole(t *testing.T) {
-	a := newAuth(nil, map[string]string{"22222222": testYear})
+	a := newAuth(nil, nil, map[string]string{"22222222": testYear})
 
 	req := httptest.NewRequest(http.MethodPost, "/login",
 		strings.NewReader(url.Values{"phone": {"22222222"}, "redir": {"/"}}.Encode()))

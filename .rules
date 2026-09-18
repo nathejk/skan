@@ -334,9 +334,10 @@ sticker.
 
 There is no external auth service here (unlike `hq`). `internal/login`:
 
-- `POST /login` takes a phone number, looks it up in the `personnel` projection
-  and then the `senior` projection, and stores the resulting user as a
-  **base64-encoded JSON cookie** named `user`.
+- `POST /login` takes a phone number, looks it up in the `personnel` and
+  `crewmember` projections (either makes the scanner **crew**) and then the `senior`
+  projection (**bandit**), and stores the resulting user as a **base64-encoded JSON
+  cookie** named `user`.
 - `Authenticate(next, login)` renders the login page instead of the target when
   the cookie is absent.
 - The cookie is **not signed, not HttpOnly and not Secure** — it is trivially
@@ -352,10 +353,26 @@ The rules, **implemented in `internal/login` (task 001)**:
 
 | Phone found in | Role |
 |---|---|
-| `personnel` only | crew |
+| `personnel` or `crewmember` only | crew |
 | `senior` only | bandit |
-| **both** | **refuse the login** |
+| **crew *and* senior** | **refuse the login** |
 | neither | refuse the login |
+
+**There are two crew sources, and either one is enough.** `personnel` covers the older
+crew types (`gøgler`, `friend`); the 2026 crew pipeline signs people up as `crew`/
+`crewmember` events instead, which land in shared-go's `crewmember` projection. Both are
+crew and both must be able to scan, so login consults both. Being in *both* crew sources is
+no conflict — only crew-vs-senior is. The `crewmember` projection is **imported from
+`shared-go/tables/crewmember`, not copied**: it has already stabilised there and hq wires
+the same package. Skan reads it with a **nil publisher**; crew signups happen in
+tilmelding/hq.
+
+**The two crew sources store phone differently.** `personnel` stores it normalised;
+`crewmember` stores it as signed up (its shared-go consumer writes the raw value), which may
+carry a `+45` country code. So `data.CrewMemberReader.GetByPhone` reduces both sides to
+digits with `REGEXP_REPLACE` and matches with **and** without a leading `45` — a bare read
+of `phone = ?` would lock real crew out. It is a skan-side reader (like `KortReader`) because
+the shared-go querier exposes no phone lookup.
 
 **"Senior" and "bandit" are the same thing** — a senior signed up to a klan *is* a
 bandit, so presence in the `senior` projection is the whole bandit test. There is
@@ -395,6 +412,7 @@ skan/
     │                     #   copied: patrulje, klan, senior, personnel, photo,
     │                     #           photocover, kort, spejderstatus,
     │                     #           checkpoint, checkpersonnel
+    │                     #   imported from shared-go: crewmember
     │                     #   tables.Quote / tables.Datetime live in table/sql.go
     └── maps.go, photos.go, checkpoints.go   # handler-side helpers for kort, photo, checkpoint hours
 ```

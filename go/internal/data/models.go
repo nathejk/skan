@@ -39,6 +39,16 @@ type PersonnelInterface interface {
 	GetByID(context.Context, types.UserID) (*personnel.Person, error)
 	GetByPhone(ctx context.Context, yearSlug string, phone types.PhoneNumber) (*personnel.Person, error)
 }
+
+// CrewMemberInterface is the crew-member projection as login needs it: a phone lookup.
+//
+// Crew signed up through the 2026 crew pipeline (`crew`/`crewmember` events) land here
+// rather than in `personnel` (which covers gøgler and friend), so login must consult both
+// to let every kind of crew scan. Only the userId is needed — the role is "crew" by virtue
+// of being found at all. Returns ErrRecordNotFound when the number is not this year's crew.
+type CrewMemberInterface interface {
+	GetByPhone(ctx context.Context, yearSlug string, phone types.PhoneNumber) (types.UserID, error)
+}
 type QrInterface interface {
 	GetByID(ctx context.Context, yearSlug string, qrID types.QrID) (*qr.QR, error)
 
@@ -120,4 +130,5 @@ type Models struct {
 	PhotoCover PhotoCoverInterface
 	Kort       KortInterface
 	Checkpoint CheckpointInterface
+	CrewMember CrewMemberInterface
 }

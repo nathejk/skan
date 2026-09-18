@@ -11,6 +11,7 @@ import (
 	"github.com/jrgensen/cqrs/sqlpersister"
 	"github.com/jrgensen/stream/jetstream"
 	"github.com/jrgensen/stream/xstream"
+	"github.com/nathejk/shared-go/tables/crewmember"
 	"github.com/nathejk/shared-go/types"
 	"nathejk.dk/internal/data"
 	"nathejk.dk/internal/jsonlog"
@@ -114,12 +115,18 @@ func main() {
 	checkpointtable := checkpoint.New(nil, sqlw, db.DB())
 	checkpersonneltable := checkpersonnel.New(nil, sqlw, db.DB())
 
+	// Crew members signed up through the 2026 crew pipeline (crew/crewmember events).
+	// Nil publisher: skan only reads them, to let a crew member log in and scan — signups
+	// happen in tilmelding/hq. This is shared-go's projection, imported rather than copied
+	// because it has already stabilised there (hq wires the same package).
+	crewmembertable := crewmember.New(nil, sqlw, db.DB())
+
 	// Every schema exists from here on, so failures become recoverable rather than
 	// fatal.
 	sqlw.Arm()
 
 	mux := xstream.NewMux(js)
-	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable, phototable, photocovertable, korttable, spejderstatustable, checkpointtable, checkpersonneltable)
+	mux.AddConsumer(klantable, seniortable, patruljetable, personneltable, qrtable, scantable, phototable, photocovertable, korttable, spejderstatustable, checkpointtable, checkpersonneltable, crewmembertable)
 	if err := mux.Run(ctx); err != nil {
 		logger.PrintFatal(err, nil)
 	}
@@ -143,6 +150,9 @@ func main() {
 		// Reads the tables checkpointtable and checkpersonneltable maintain, for the same
 		// reason — see data.CheckpointReader.
 		Checkpoint: data.CheckpointReader{DB: db.DB()},
+		// Reads the crewmember table by phone, which the shared-go querier does not expose
+		// — see data.CrewMemberReader.
+		CrewMember: data.CrewMemberReader{DB: db.DB()},
 	}
 	app.commands = commands.New(js, app.config.year)
 
