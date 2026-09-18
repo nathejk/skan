@@ -11,19 +11,37 @@ jobs:
   dump_contexts_to_log:
     runs-on: ubuntu-latest
     steps:
+      # Contexts are passed through the environment, never interpolated straight into the
+      # shell command. A value like the commit message contains arbitrary text — an
+      # apostrophe (e.g. "HQ's remark") in `echo '${{ toJSON(github) }}'` closes the quote
+      # and the rest is parsed as broken shell, failing the step with exit 2. It is also a
+      # script-injection vector. `env:` hands the value to the process directly, so the
+      # shell only sees the variable reference.
       - name: Dump GitHub context
         id: github_context_step
-        run: echo '${{ toJSON(github) }}'
+        env:
+          GITHUB_CONTEXT: ${{ toJSON(github) }}
+        run: echo "$GITHUB_CONTEXT"
       - name: Dump job context
-        run: echo '${{ toJSON(job) }}'
+        env:
+          JOB_CONTEXT: ${{ toJSON(job) }}
+        run: echo "$JOB_CONTEXT"
       - name: Dump steps context
-        run: echo '${{ toJSON(steps) }}'
+        env:
+          STEPS_CONTEXT: ${{ toJSON(steps) }}
+        run: echo "$STEPS_CONTEXT"
       - name: Dump runner context
-        run: echo '${{ toJSON(runner) }}'
+        env:
+          RUNNER_CONTEXT: ${{ toJSON(runner) }}
+        run: echo "$RUNNER_CONTEXT"
       - name: Dump strategy context
-        run: echo '${{ toJSON(strategy) }}'
+        env:
+          STRATEGY_CONTEXT: ${{ toJSON(strategy) }}
+        run: echo "$STRATEGY_CONTEXT"
       - name: Dump matrix context
-        run: echo '${{ toJSON(matrix) }}'
+        env:
+          MATRIX_CONTEXT: ${{ toJSON(matrix) }}
+        run: echo "$MATRIX_CONTEXT"
 
   # define job to build and publish docker image
   build-and-push-docker-image:
