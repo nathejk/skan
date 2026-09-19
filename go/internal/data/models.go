@@ -117,6 +117,12 @@ type CheckpointInterface interface {
 	PreviousCheckpointScan(ctx context.Context, year, teamID, excludePostID string) (time.Time, bool, error)
 }
 
+// GeoInterface is the /geo export: every positioned scan, with the scanner and patrulje
+// already resolved. One query rather than a lookup per scan — see GeoReader.
+type GeoInterface interface {
+	Scans(ctx context.Context) ([]GeoScan, error)
+}
+
 // Models is the read side as handlers see it: one interface per projection this
 // service actually reads.
 type Models struct {
@@ -131,4 +137,5 @@ type Models struct {
 	Kort       KortInterface
 	Checkpoint CheckpointInterface
 	CrewMember CrewMemberInterface
+	Geo        GeoInterface
 }

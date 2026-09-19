@@ -153,6 +153,8 @@ func main() {
 		// Reads the crewmember table by phone, which the shared-go querier does not expose
 		// — see data.CrewMemberReader.
 		CrewMember: data.CrewMemberReader{DB: db.DB()},
+		// Joins scan to the projections that name it, in one query — see data.GeoReader.
+		Geo: data.GeoReader{DB: db.DB()},
 	}
 	app.commands = commands.New(js, app.config.year)
 

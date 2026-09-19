@@ -56,46 +56,36 @@ func (a *App) geoHandler(w http.ResponseWriter, r *http.Request) {
 		// Accuracy is the radius of confidence in metres, or "" when unknown.
 		Accuracy string `json:"accuracy"`
 	}
-	scans, _ := a.models.Scan.GetAll(r.Context(), scan.Filter{})
-	geo := []row{}
+
+	// One join, not a lookup per scan: this used to ask four extra questions about every
+	// row, which is over ten thousand round trips on live data. The scanner's name, role
+	// and lok arrive already resolved — see data.GeoReader.
+	scans, err := a.models.Geo.Scans(r.Context())
+	if err != nil {
+		log.Printf("building the geo export: %v", err)
+		http.Error(w, "Internal Server Error (geo)", http.StatusInternalServerError)
+		return
+	}
+
+	geo := make([]row, 0, len(scans))
 	for _, s := range scans {
-		if (s.Latitude == "") || (s.Longitude == "") {
-			continue
-		}
-		data := map[string]string{}
-		patrulje, _ := a.models.Patrulje.GetByID(r.Context(), s.TeamID)
-		senior, _ := a.models.Senior.GetByID(r.Context(), types.MemberID(s.ScannerID))
-		if senior != nil {
-			data["scanner"] = senior.Name
-			data["role"] = "Bandit"
-			klan, _ := a.models.Klan.GetByID(r.Context(), senior.TeamID)
-			if klan != nil {
-				data["lok"] = fmt.Sprintf("LOK %s", klan.Lok)
-			}
-		}
-		person, _ := a.models.Personnel.GetByID(r.Context(), types.UserID(s.ScannerID))
-		if person != nil {
-			data["scanner"] = person.Name
-			if v, ok := person.Additionals["department"].(string); ok {
-				data["role"] = v
-			}
-		}
-		qrID, _ := strconv.Atoi(string(s.QrID))
+		qrID, _ := strconv.Atoi(s.QrID)
 		ID, _ := strconv.Atoi(fmt.Sprintf("%d%05d", s.Uts, qrID))
 		geo = append(geo, row{
 			ID:         ID,
 			TeamNumber: fmt.Sprintf("%d", s.TeamNumber),
-			TeamName:   patrulje.Name,
+			TeamName:   s.TeamName,
 			Timestamp:  time.Unix(s.Uts, 0).Format(time.RFC3339),
 			Latitude:   s.Latitude,
 			Longitude:  s.Longitude,
-			Scanner:    data["scanner"],
-			Lok:        data["lok"],
-			Role:       data["role"],
+			Scanner:    s.Scanner,
+			Lok:        s.Lok,
+			Role:       s.Role,
 			Source:     s.LocationSource,
 			Accuracy:   s.LocationAccuracy,
 		})
 	}
+
 	jsonstr, _ := json.Marshal(geo)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

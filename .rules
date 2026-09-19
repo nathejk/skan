@@ -700,6 +700,25 @@ Flag or fix these deliberately; don't quietly copy the pattern.
   other side, except a handler cannot wait here.
   Every unconfirmed scan logs `rescan guard: …` with both inputs and which was used, because
   "I was not asked" is otherwise indistinguishable from "the rule said record".
+- **`/geo` is built with one join, and `klan.GetByID` must not be used.** The export used to
+  ask four extra questions per scan (patrulje, senior, that senior's klan, personnel) — over
+  13,000 round trips for 3.4k positioned scans. `data.GeoReader` does it in a single query.
+  Two things to know before touching it:
+  - **`klan.GetByID` is broken in this service and is now unused.** Its SQL inner-joins
+    `patruljestatus`, a table skan does not project (deleted in task 012), so it always fails
+    with `Table 'skan.patruljestatus' doesn't exist`. The old handler swallowed that with
+    `klan, _ :=`, which is why the export's `lok` was **silently empty for every bandit scan**
+    — 2243 rows on live data. The join reads `klan.lok` directly and the field now populates.
+    `models.Klan` has no remaining callers; do not reach for it without fixing the querier.
+  - **The `senior` join must match `year` as well as `memberId`.** `senior` is keyed
+    (year, memberId), so joining on the id alone multiplies a scan into one row per year that
+    member has existed — the same fan-out `CountCatchesByTeam` avoids with `EXISTS`. The other
+    joins key on a year-unique `teamId`/`userId` and cannot fan out.
+
+  Scanner identity precedence (senior sets name/role/lok, a personnel row then overrides the
+  name, and the role only when it states a department) lives in `resolveScanner` and is
+  tested. It turns on **row presence, not emptiness** — a klan row with a blank lok still
+  renders `"LOK "`.
 - The geolocation fallback shows a Leaflet map and records the marker with
   `locationSource=manual` (task 016). A GPS fix also records `locationAccuracy` in
   metres; a hand-placed marker deliberately has none, because there is no measurement
